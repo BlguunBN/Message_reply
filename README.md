@@ -48,9 +48,9 @@ python --version
 ```
 
 ### B) Create & activate a virtual environment (recommended)
-From `D:\personal\Code\projects\Message_reply\server`:
+From the `server/` directory:
 ```powershell
-cd "D:\personal\Code\projects\Message_reply\server"
+cd path\to\Message_reply\server
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
