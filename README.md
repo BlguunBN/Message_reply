@@ -77,6 +77,44 @@ Required keys:
 Optional:
 - `TELEGRAM_FORMAT` = `plain` or `markdown`
 
+---
+
+## Security & Config
+
+### Authentication
+This server supports **two authentication methods**:
+
+1) **Legacy secret (JSON field)**
+- Android sends: `{"secret": "..."}` in the JSON body
+- Server validates it against `SMS_BRIDGE_SECRET`
+
+2) **Recommended: HMAC headers (integrity + replay protection)**
+Android sends headers:
+- `X-Timestamp: <unix seconds>`
+- `X-Signature: <hex(hmac_sha256(SMS_BRIDGE_SECRET, "<timestamp>.<raw_json_body>"))>`
+
+Server verifies:
+- timestamp is within `HMAC_WINDOW_SECONDS` (default: 120s)
+- signature matches (uses constant-time compare)
+
+### Enforcing HMAC-only mode
+Set in `server/.env`:
+```env
+ALLOW_LEGACY_SECRET=false
+```
+Then the server will reject requests without `X-Timestamp` + `X-Signature`.
+
+### Reliability (Android)
+Android uses **WorkManager** to queue SMS forwarding and retry with exponential backoff when the server/Telegram is temporarily unavailable. This can introduce a small delay after the server comes back online (expected).
+
+### Helpful env keys (server)
+- `SMS_BRIDGE_SECRET`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_FORMAT=plain|markdown`
+- `HMAC_WINDOW_SECONDS=120`
+- `ALLOW_LEGACY_SECRET=true|false`
+
 ### E) Run the server
 ```powershell
 python -m uvicorn main:app --host 0.0.0.0 --port 3000
