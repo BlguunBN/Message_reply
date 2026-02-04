@@ -16,6 +16,14 @@ server/.env
 .vscode/
 .idea/
 
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+
+# DB
+server/*.sqlite3
+
 # OS
 .DS_Store
 Thumbs.db
