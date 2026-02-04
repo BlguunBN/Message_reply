@@ -30,6 +30,7 @@ TELEGRAM_FORMAT = os.getenv("TELEGRAM_FORMAT", "plain").strip().lower()
 # - Recommended: HMAC headers (X-Timestamp + X-Signature)
 #   signature = hex(hmac_sha256(SMS_BRIDGE_SECRET, f"{timestamp}.{raw_body}"))
 HMAC_WINDOW_SECONDS = int(os.getenv("HMAC_WINDOW_SECONDS", "120"))
+ALLOW_LEGACY_SECRET = os.getenv("ALLOW_LEGACY_SECRET", "true").strip().lower() in ("1", "true", "yes", "y")
 
 # SQLite log (relative to server/ unless absolute)
 DB_PATH = os.getenv("DB_PATH", "./sms-bridge.sqlite3")
@@ -156,7 +157,11 @@ def health():
     return {
         "ok": True,
         "dedupWindowSeconds": DEDUP_WINDOW_SECONDS,
-        "auth": {"legacySecret": True, "hmac": True, "hmacWindowSeconds": HMAC_WINDOW_SECONDS},
+        "auth": {
+            "legacySecret": ALLOW_LEGACY_SECRET,
+            "hmac": True,
+            "hmacWindowSeconds": HMAC_WINDOW_SECONDS,
+        },
     }
 
 
@@ -169,6 +174,8 @@ async def sms_incoming(request: Request, payload: IncomingSMS):
 
     used_hmac = _verify_hmac_headers(request=request, raw_body=raw)
     if not used_hmac:
+        if not ALLOW_LEGACY_SECRET:
+            raise HTTPException(status_code=401, detail="HMAC required")
         # Legacy fallback
         if payload.secret != SECRET:
             raise HTTPException(status_code=401, detail="Bad secret")
