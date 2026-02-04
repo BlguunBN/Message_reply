@@ -18,11 +18,16 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 PORT = int(os.getenv("PORT", "3000"))
 
+# Telegram formatting
+# - "plain": send as plain text
+# - "markdown": send as MarkdownV2 (escaped)
+TELEGRAM_FORMAT = os.getenv("TELEGRAM_FORMAT", "plain").strip().lower()
+
 # SQLite log (relative to server/ unless absolute)
 DB_PATH = os.getenv("DB_PATH", "./sms-bridge.sqlite3")
 DEDUP_WINDOW_SECONDS = int(os.getenv("DEDUP_WINDOW_SECONDS", "120"))
 
-app = FastAPI(title="Message_reply: SMS → Telegram (v0.1)")
+app = FastAPI(title="Message_reply: SMS → Telegram (v0.2)")
 
 
 class IncomingSMS(BaseModel):
@@ -43,6 +48,41 @@ def _parse_iso_to_epoch_seconds(iso: Optional[str]) -> Optional[int]:
         return int(dt.timestamp())
     except Exception:
         return None
+
+
+def _escape_markdown_v2(text: str) -> str:
+    # Telegram MarkdownV2 requires escaping these characters:
+    # _ * [ ] ( ) ~ ` > # + - = | { } . !
+    # https://core.telegram.org/bots/api#markdownv2-style
+    escape = r"_[]()~`>#+-=|{}.!*"
+    out = []
+    for ch in text:
+        if ch in escape:
+            out.append("\\" + ch)
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _format_message(from_number: str, body: str, ts: str) -> tuple[str, Optional[str]]:
+    """Returns (text, parse_mode). parse_mode None => plain text."""
+    if TELEGRAM_FORMAT == "markdown":
+        # Clean MarkdownV2 layout
+        f = _escape_markdown_v2(from_number)
+        t = _escape_markdown_v2(ts)
+        b = _escape_markdown_v2(body)
+        text = (
+            "*📩 New SMS*\n"
+            f"*From:* `{f}`\n"
+            f"*Time:* `{t}`\n"
+            "*Body:*\n"
+            f"```\n{b}\n```"
+        )
+        return text, "MarkdownV2"
+
+    # plain
+    text = f"SMS\nFrom: {from_number}\nTime: {ts}\nBody:\n{body}"
+    return text, None
 
 
 def _compute_fingerprint(from_number: str, body: str, received_at: Optional[str]) -> str:
@@ -94,10 +134,8 @@ async def sms_incoming(payload: IncomingSMS):
         # Already processed (or currently being processed) in this time window.
         return {"ok": True, "duplicate": True, "id": row_id}
 
-    # Message format requested:
-    # "Time + from + Text + phone number"
     ts = payload.receivedAt or datetime.now(timezone.utc).isoformat(timespec="seconds")
-    text = f"Time: {ts}\nFrom: {payload.from_number}\nText: {payload.body}\nPhone: {payload.from_number}"
+    text, parse_mode = _format_message(payload.from_number, payload.body, ts)
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {
@@ -105,6 +143,8 @@ async def sms_incoming(payload: IncomingSMS):
         "text": text,
         "disable_web_page_preview": True,
     }
+    if parse_mode:
+        data["parse_mode"] = parse_mode
 
     telegram_message_id: Optional[int] = None
     telegram_error: Optional[str] = None

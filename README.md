@@ -8,7 +8,7 @@
 ## What this is
 - **v0 goal:** forward **incoming SMS** (Android device / emulator) to **Telegram**.
 - **Server runs locally** on your PC on the same Wi‑Fi (no tunneling).
-- **Message format:** `Time + From + Text + Phone number`
+- **Message format:** clean `From / Time / Body` (optionally Markdown)
 
 ## Folder layout
 - `server/` — Python FastAPI webhook server
@@ -73,6 +73,9 @@ Required keys:
 - `SMS_BRIDGE_SECRET`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
+
+Optional:
+- `TELEGRAM_FORMAT` = `plain` or `markdown`
 
 ### E) Run the server
 ```powershell
