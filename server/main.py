@@ -1,11 +1,15 @@
+import hashlib
+import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
+from db import init_db, mark_telegram_result, try_insert_incoming
 
 load_dotenv()
 
@@ -14,7 +18,11 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 PORT = int(os.getenv("PORT", "3000"))
 
-app = FastAPI(title="Message_reply: SMS → Telegram (v0)")
+# SQLite log (relative to server/ unless absolute)
+DB_PATH = os.getenv("DB_PATH", "./sms-bridge.sqlite3")
+DEDUP_WINDOW_SECONDS = int(os.getenv("DEDUP_WINDOW_SECONDS", "120"))
+
+app = FastAPI(title="Message_reply: SMS → Telegram (v0.1)")
 
 
 class IncomingSMS(BaseModel):
@@ -24,9 +32,45 @@ class IncomingSMS(BaseModel):
     receivedAt: Optional[str] = None  # ISO timestamp string (optional)
 
 
+def _parse_iso_to_epoch_seconds(iso: Optional[str]) -> Optional[int]:
+    if not iso:
+        return None
+    try:
+        # Python 3.11+ parses ISO offsets; tolerate trailing Z
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except Exception:
+        return None
+
+
+def _compute_fingerprint(from_number: str, body: str, received_at: Optional[str]) -> str:
+    # Goal: suppress duplicates caused by retries/multipart within a short window.
+    # We bucket by time window to tolerate small timestamp differences.
+    epoch = _parse_iso_to_epoch_seconds(received_at)
+    if epoch is None:
+        epoch = int(datetime.now(timezone.utc).timestamp())
+    window = max(1, DEDUP_WINDOW_SECONDS)
+    bucket = epoch // window
+
+    payload = {
+        "from": from_number,
+        "body": body,
+        "bucket": bucket,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+@app.on_event("startup")
+def _startup():
+    init_db(DB_PATH)
+
+
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "dedupWindowSeconds": DEDUP_WINDOW_SECONDS}
 
 
 @app.post("/sms/incoming")
@@ -37,9 +81,22 @@ async def sms_incoming(payload: IncomingSMS):
     if payload.secret != SECRET:
         raise HTTPException(status_code=401, detail="Bad secret")
 
+    fingerprint = _compute_fingerprint(payload.from_number, payload.body, payload.receivedAt)
+    inserted, row_id = try_insert_incoming(
+        db_path=DB_PATH,
+        fingerprint=fingerprint,
+        from_number=payload.from_number,
+        body=payload.body,
+        received_at=payload.receivedAt,
+    )
+
+    if not inserted:
+        # Already processed (or currently being processed) in this time window.
+        return {"ok": True, "duplicate": True, "id": row_id}
+
     # Message format requested:
     # "Time + from + Text + phone number"
-    ts = payload.receivedAt or datetime.now().isoformat(timespec="seconds")
+    ts = payload.receivedAt or datetime.now(timezone.utc).isoformat(timespec="seconds")
     text = f"Time: {ts}\nFrom: {payload.from_number}\nText: {payload.body}\nPhone: {payload.from_number}"
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -49,9 +106,28 @@ async def sms_incoming(payload: IncomingSMS):
         "disable_web_page_preview": True,
     }
 
+    telegram_message_id: Optional[int] = None
+    telegram_error: Optional[str] = None
+
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(url, data=data)
         if r.status_code != 200:
-            raise HTTPException(status_code=502, detail=f"Telegram error: {r.text}")
+            telegram_error = r.text
+        else:
+            try:
+                j = r.json()
+                telegram_message_id = int(j.get("result", {}).get("message_id")) if j.get("ok") else None
+            except Exception:
+                telegram_message_id = None
 
-    return {"ok": True}
+    mark_telegram_result(
+        db_path=DB_PATH,
+        row_id=row_id,
+        telegram_message_id=telegram_message_id,
+        telegram_error=telegram_error,
+    )
+
+    if telegram_error:
+        raise HTTPException(status_code=502, detail=f"Telegram error: {telegram_error}")
+
+    return {"ok": True, "duplicate": False, "id": row_id, "telegram_message_id": telegram_message_id}

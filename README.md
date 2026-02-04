@@ -2,6 +2,7 @@
 
 ## Status
 - ✅ Local server is running and can forward a test payload to Telegram.
+- ✅ Server logs to SQLite + deduplicates incoming messages (prevents double-forwards on retries).
 - ⏭️ Next milestone: Android receiver (or emulator) to capture incoming SMS and POST it to the local server.
 
 ## What this is
