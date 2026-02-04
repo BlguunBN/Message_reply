@@ -8,11 +8,13 @@ import androidx.work.Data
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Duration
+import java.util.Locale
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 class SmsForwardWorker(
     appContext: Context,
@@ -22,9 +24,10 @@ class SmsForwardWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val endpoint = inputData.getString(KEY_ENDPOINT) ?: return@withContext Result.failure()
         val jsonBody = inputData.getString(KEY_JSON) ?: return@withContext Result.failure()
+        val secret = inputData.getString(KEY_SECRET) ?: ""
 
         try {
-            val (code, errBody) = postJson(endpoint, jsonBody)
+            val (code, errBody) = postJson(endpoint, jsonBody, secret)
 
             // Decide retry vs fail
             return@withContext when {
@@ -55,15 +58,23 @@ class SmsForwardWorker(
         }
     }
 
-    private fun postJson(url: String, jsonBody: String): Pair<Int, String?> {
+    private fun postJson(url: String, jsonBody: String, secret: String): Pair<Int, String?> {
         val conn = (URL(url).openConnection() as HttpURLConnection)
         try {
             conn.requestMethod = "POST"
             conn.connectTimeout = 10_000
             conn.readTimeout = 10_000
             conn.setRequestProperty("Content-Type", "application/json")
-            conn.doOutput = true
 
+            // Optional HMAC auth headers (recommended). We still send legacy JSON secret.
+            if (secret.isNotBlank()) {
+                val ts = (System.currentTimeMillis() / 1000L).toString()
+                val sig = hmacSha256Hex(secret, "$ts.$jsonBody")
+                conn.setRequestProperty("X-Timestamp", ts)
+                conn.setRequestProperty("X-Signature", sig)
+            }
+
+            conn.doOutput = true
             conn.outputStream.use { it.write(jsonBody.toByteArray(Charsets.UTF_8)) }
 
             val code = conn.responseCode
@@ -77,16 +88,25 @@ class SmsForwardWorker(
         }
     }
 
+    private fun hmacSha256Hex(secret: String, message: String): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        val out = mac.doFinal(message.toByteArray(Charsets.UTF_8))
+        return out.joinToString("") { "%02x".format(it) }.lowercase(Locale.US)
+    }
+
     companion object {
         private const val TAG = "SmsForwardWorker"
 
         const val KEY_ENDPOINT = "endpoint"
         const val KEY_JSON = "json"
+        const val KEY_SECRET = "secret"
 
-        fun inputData(endpoint: String, json: String): Data =
+        fun inputData(endpoint: String, json: String, secret: String): Data =
             Data.Builder()
                 .putString(KEY_ENDPOINT, endpoint)
                 .putString(KEY_JSON, json)
+                .putString(KEY_SECRET, secret)
                 .build()
 
         val backoffPolicy: BackoffPolicy = BackoffPolicy.EXPONENTIAL

@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import json
 import os
 from datetime import datetime, timezone
@@ -6,7 +7,7 @@ from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from db import init_db, mark_telegram_result, try_insert_incoming
@@ -23,11 +24,18 @@ PORT = int(os.getenv("PORT", "3000"))
 # - "markdown": send as MarkdownV2 (escaped)
 TELEGRAM_FORMAT = os.getenv("TELEGRAM_FORMAT", "plain").strip().lower()
 
+# Auth/security
+# We accept BOTH methods:
+# - Legacy: payload.secret == SMS_BRIDGE_SECRET
+# - Recommended: HMAC headers (X-Timestamp + X-Signature)
+#   signature = hex(hmac_sha256(SMS_BRIDGE_SECRET, f"{timestamp}.{raw_body}"))
+HMAC_WINDOW_SECONDS = int(os.getenv("HMAC_WINDOW_SECONDS", "120"))
+
 # SQLite log (relative to server/ unless absolute)
 DB_PATH = os.getenv("DB_PATH", "./sms-bridge.sqlite3")
 DEDUP_WINDOW_SECONDS = int(os.getenv("DEDUP_WINDOW_SECONDS", "120"))
 
-app = FastAPI(title="Message_reply: SMS → Telegram (v0.2)")
+app = FastAPI(title="Message_reply: SMS → Telegram (v0.3)")
 
 
 class IncomingSMS(BaseModel):
@@ -85,6 +93,41 @@ def _format_message(from_number: str, body: str, ts: str) -> tuple[str, Optional
     return text, None
 
 
+def _verify_hmac_headers(*, request: Request, raw_body: bytes) -> bool:
+    """Return True if HMAC auth passes, False if headers missing.
+
+    Raises HTTPException on present-but-invalid headers.
+    """
+    ts = request.headers.get("x-timestamp")
+    sig = request.headers.get("x-signature")
+
+    if not ts and not sig:
+        return False  # no HMAC headers
+
+    if not ts or not sig:
+        raise HTTPException(status_code=401, detail="Missing X-Timestamp or X-Signature")
+
+    try:
+        ts_int = int(ts)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Bad X-Timestamp")
+
+    now = int(datetime.now(timezone.utc).timestamp())
+    if abs(now - ts_int) > max(1, HMAC_WINDOW_SECONDS):
+        raise HTTPException(status_code=401, detail="Stale request")
+
+    if not SECRET:
+        raise HTTPException(status_code=500, detail="Server not configured. Create .env from .env.example")
+
+    msg = str(ts_int).encode("utf-8") + b"." + raw_body
+    expected = hmac.new(SECRET.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+
+    if not hmac.compare_digest(expected, sig.strip().lower()):
+        raise HTTPException(status_code=401, detail="Bad signature")
+
+    return True
+
+
 def _compute_fingerprint(from_number: str, body: str, received_at: Optional[str]) -> str:
     # Goal: suppress duplicates caused by retries/multipart within a short window.
     # We bucket by time window to tolerate small timestamp differences.
@@ -110,16 +153,25 @@ def _startup():
 
 @app.get("/health")
 def health():
-    return {"ok": True, "dedupWindowSeconds": DEDUP_WINDOW_SECONDS}
+    return {
+        "ok": True,
+        "dedupWindowSeconds": DEDUP_WINDOW_SECONDS,
+        "auth": {"legacySecret": True, "hmac": True, "hmacWindowSeconds": HMAC_WINDOW_SECONDS},
+    }
 
 
 @app.post("/sms/incoming")
-async def sms_incoming(payload: IncomingSMS):
+async def sms_incoming(request: Request, payload: IncomingSMS):
     if not SECRET or not BOT_TOKEN or not CHAT_ID:
         raise HTTPException(status_code=500, detail="Server not configured. Create .env from .env.example")
 
-    if payload.secret != SECRET:
-        raise HTTPException(status_code=401, detail="Bad secret")
+    raw = await request.body()
+
+    used_hmac = _verify_hmac_headers(request=request, raw_body=raw)
+    if not used_hmac:
+        # Legacy fallback
+        if payload.secret != SECRET:
+            raise HTTPException(status_code=401, detail="Bad secret")
 
     fingerprint = _compute_fingerprint(payload.from_number, payload.body, payload.receivedAt)
     inserted, row_id = try_insert_incoming(
