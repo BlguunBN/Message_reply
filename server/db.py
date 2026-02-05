@@ -33,6 +33,7 @@ def connect(db_path: str) -> sqlite3.Connection:
 def init_db(db_path: str) -> None:
     conn = connect(db_path)
     try:
+        # v0: SMS log
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sms_messages (
@@ -48,6 +49,36 @@ def init_db(db_path: str) -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sms_created_at ON sms_messages(created_at)")
+
+        # v1: Users + API tokens
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              username TEXT NOT NULL UNIQUE,
+              email TEXT NOT NULL UNIQUE,
+              password_hash TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at)")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS api_tokens (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id INTEGER NOT NULL,
+              token_hash TEXT NOT NULL UNIQUE,
+              created_at TEXT NOT NULL,
+              last_used_at TEXT,
+              revoked_at TEXT,
+              FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens(user_id)")
+
         conn.commit()
     finally:
         conn.close()
@@ -103,5 +134,79 @@ def mark_telegram_result(
             (telegram_message_id, telegram_error, row_id),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def create_user(*, db_path: str, username: str, email: str, password_hash: str) -> int:
+    conn = connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO users (username, email, password_hash, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (username, email, password_hash, _utc_now_iso()),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+def get_user_by_identifier(*, db_path: str, identifier: str):
+    """identifier can be username or email."""
+    conn = connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT id, username, email, password_hash, created_at
+              FROM users
+             WHERE lower(username) = lower(?) OR lower(email) = lower(?)
+            """,
+            (identifier, identifier),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def create_api_token(*, db_path: str, user_id: int, token_hash: str) -> int:
+    conn = connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO api_tokens (user_id, token_hash, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (user_id, token_hash, _utc_now_iso()),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+def get_user_by_token_hash(*, db_path: str, token_hash: str):
+    conn = connect(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT u.id, u.username, u.email
+              FROM api_tokens t
+              JOIN users u ON u.id = t.user_id
+             WHERE t.token_hash = ?
+               AND t.revoked_at IS NULL
+            """,
+            (token_hash,),
+        ).fetchone()
+        if not row:
+            return None
+        # update last_used_at (best effort)
+        conn.execute("UPDATE api_tokens SET last_used_at = ? WHERE token_hash = ?", (_utc_now_iso(), token_hash))
+        conn.commit()
+        return dict(row)
     finally:
         conn.close()

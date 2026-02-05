@@ -10,7 +10,17 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from db import init_db, mark_telegram_result, try_insert_incoming
+from passlib.context import CryptContext
+
+from db import (
+    create_api_token,
+    create_user,
+    get_user_by_identifier,
+    get_user_by_token_hash,
+    init_db,
+    mark_telegram_result,
+    try_insert_incoming,
+)
 
 load_dotenv()
 
@@ -18,6 +28,12 @@ SECRET = os.getenv("SMS_BRIDGE_SECRET", "")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 PORT = int(os.getenv("PORT", "3000"))
+
+# Auth
+AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").strip().lower() in ("1", "true", "yes", "y")
+ALLOW_SECRET_AUTH = os.getenv("ALLOW_SECRET_AUTH", "false").strip().lower() in ("1", "true", "yes", "y")
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Telegram formatting
 # - "plain": send as plain text
@@ -40,10 +56,22 @@ app = FastAPI(title="Message_reply: SMS → Telegram (v0.3)")
 
 
 class IncomingSMS(BaseModel):
-    secret: str
+    # Legacy secret (optional). Prefer Authorization: Bearer <token>.
+    secret: Optional[str] = None
     from_number: str = Field(alias="from")
     body: str
     receivedAt: Optional[str] = None  # ISO timestamp string (optional)
+
+
+class SignupRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    identifier: str  # username OR email
+    password: str
 
 
 def _parse_iso_to_epoch_seconds(iso: Optional[str]) -> Optional[int]:
@@ -118,7 +146,7 @@ def _verify_hmac_headers(*, request: Request, raw_body: bytes) -> bool:
         raise HTTPException(status_code=401, detail="Stale request")
 
     if not SECRET:
-        raise HTTPException(status_code=500, detail="Server not configured. Create .env from .env.example")
+        raise HTTPException(status_code=500, detail="Server missing SMS_BRIDGE_SECRET")
 
     msg = str(ts_int).encode("utf-8") + b"." + raw_body
     expected = hmac.new(SECRET.encode("utf-8"), msg, hashlib.sha256).hexdigest()
@@ -127,6 +155,30 @@ def _verify_hmac_headers(*, request: Request, raw_body: bytes) -> bool:
         raise HTTPException(status_code=401, detail="Bad signature")
 
     return True
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _get_bearer_token(request: Request) -> Optional[str]:
+    auth = request.headers.get("authorization") or request.headers.get("Authorization")
+    if not auth:
+        return None
+    parts = auth.strip().split(" ")
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+    return parts[1].strip() or None
+
+
+def _require_user(request: Request):
+    token = _get_bearer_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing Bearer token")
+    user = get_user_by_token_hash(db_path=DB_PATH, token_hash=_hash_token(token))
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return user
 
 
 def _compute_fingerprint(from_number: str, body: str, received_at: Optional[str]) -> str:
@@ -158,6 +210,8 @@ def health():
         "ok": True,
         "dedupWindowSeconds": DEDUP_WINDOW_SECONDS,
         "auth": {
+            "bearerRequired": AUTH_REQUIRED,
+            "allowSecretAuthFallback": ALLOW_SECRET_AUTH,
             "legacySecret": ALLOW_LEGACY_SECRET,
             "hmac": True,
             "hmacWindowSeconds": HMAC_WINDOW_SECONDS,
@@ -165,20 +219,79 @@ def health():
     }
 
 
+@app.post("/auth/signup")
+def auth_signup(req: SignupRequest):
+    if not req.username.strip() or not req.email.strip() or not req.password:
+        raise HTTPException(status_code=400, detail="Missing fields")
+
+    username = req.username.strip()
+    email = req.email.strip()
+
+    pw_hash = pwd_context.hash(req.password)
+    try:
+        user_id = create_user(db_path=DB_PATH, username=username, email=email, password_hash=pw_hash)
+    except Exception as e:
+        # likely UNIQUE constraint
+        raise HTTPException(status_code=400, detail=f"User already exists or invalid: {e}")
+
+    # Create a token immediately
+    token = os.urandom(32).hex()
+    create_api_token(db_path=DB_PATH, user_id=user_id, token_hash=_hash_token(token))
+
+    return {"ok": True, "token": token, "user": {"id": user_id, "username": username, "email": email}}
+
+
+@app.post("/auth/login")
+def auth_login(req: LoginRequest):
+    identifier = req.identifier.strip()
+    if not identifier or not req.password:
+        raise HTTPException(status_code=400, detail="Missing fields")
+
+    user = get_user_by_identifier(db_path=DB_PATH, identifier=identifier)
+    if not user:
+        raise HTTPException(status_code=401, detail="Bad credentials")
+
+    if not pwd_context.verify(req.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Bad credentials")
+
+    token = os.urandom(32).hex()
+    create_api_token(db_path=DB_PATH, user_id=int(user["id"]), token_hash=_hash_token(token))
+
+    return {
+        "ok": True,
+        "token": token,
+        "user": {"id": int(user["id"]), "username": user["username"], "email": user["email"]},
+    }
+
+
 @app.post("/sms/incoming")
 async def sms_incoming(request: Request, payload: IncomingSMS):
-    if not SECRET or not BOT_TOKEN or not CHAT_ID:
+    if not BOT_TOKEN or not CHAT_ID:
         raise HTTPException(status_code=500, detail="Server not configured. Create .env from .env.example")
 
-    raw = await request.body()
+    # Preferred auth: Bearer token
+    authed_user = None
+    if AUTH_REQUIRED:
+        token = _get_bearer_token(request)
+        if token:
+            authed_user = get_user_by_token_hash(db_path=DB_PATH, token_hash=_hash_token(token))
+        if not authed_user:
+            if not ALLOW_SECRET_AUTH:
+                raise HTTPException(status_code=401, detail="Unauthorized")
+            # else: try secret/HMAC below
 
-    used_hmac = _verify_hmac_headers(request=request, raw_body=raw)
-    if not used_hmac:
-        if not ALLOW_LEGACY_SECRET:
-            raise HTTPException(status_code=401, detail="HMAC required")
-        # Legacy fallback
-        if payload.secret != SECRET:
-            raise HTTPException(status_code=401, detail="Bad secret")
+    # Optional fallback auth: secret/HMAC
+    if not authed_user and (not AUTH_REQUIRED or ALLOW_SECRET_AUTH):
+        raw = await request.body()
+
+        used_hmac = _verify_hmac_headers(request=request, raw_body=raw)
+        if not used_hmac:
+            if not ALLOW_LEGACY_SECRET:
+                raise HTTPException(status_code=401, detail="HMAC required")
+            if not SECRET:
+                raise HTTPException(status_code=500, detail="Server missing SMS_BRIDGE_SECRET")
+            if (payload.secret or "") != SECRET:
+                raise HTTPException(status_code=401, detail="Bad secret")
 
     fingerprint = _compute_fingerprint(payload.from_number, payload.body, payload.receivedAt)
     inserted, row_id = try_insert_incoming(
@@ -190,7 +303,6 @@ async def sms_incoming(request: Request, payload: IncomingSMS):
     )
 
     if not inserted:
-        # Already processed (or currently being processed) in this time window.
         return {"ok": True, "duplicate": True, "id": row_id}
 
     ts = payload.receivedAt or datetime.now(timezone.utc).isoformat(timespec="seconds")

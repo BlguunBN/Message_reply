@@ -3,7 +3,8 @@
 ## Status
 - ✅ Local server is running and can forward a test payload to Telegram.
 - ✅ Server logs to SQLite + deduplicates incoming messages (prevents double-forwards on retries).
-- ⏭️ Next milestone: Android receiver (or emulator) to capture incoming SMS and POST it to the local server.
+- ✅ Android app has Login/Signup UI and uses Bearer token auth.
+- ⏭️ Next milestone: polish UX + add a simple "view logs" admin page (optional).
 
 ## What this is
 - **v0 goal:** forward **incoming SMS** (Android device / emulator) to **Telegram**.
@@ -81,28 +82,44 @@ Optional:
 
 ## Security & Config
 
-### Authentication
-This server supports **two authentication methods**:
+### Authentication (recommended)
+**Bearer token auth** for `/sms/incoming`:
+- Android logs in/signs up via `/auth/login` or `/auth/signup`
+- Server returns a token
+- Android sends: `Authorization: Bearer <token>`
+
+Enable in `server/.env`:
+```env
+AUTH_REQUIRED=true
+ALLOW_SECRET_AUTH=false
+```
+
+### Optional fallback (legacy secret/HMAC)
+You can optionally allow the old secret/HMAC method **only as a fallback** when no Bearer token is present:
+
+```env
+ALLOW_SECRET_AUTH=true
+```
+
+Secret/HMAC methods:
 
 1) **Legacy secret (JSON field)**
 - Android sends: `{"secret": "..."}` in the JSON body
 - Server validates it against `SMS_BRIDGE_SECRET`
 
-2) **Recommended: HMAC headers (integrity + replay protection)**
+2) **HMAC headers (integrity + replay protection)**
 Android sends headers:
 - `X-Timestamp: <unix seconds>`
 - `X-Signature: <hex(hmac_sha256(SMS_BRIDGE_SECRET, "<timestamp>.<raw_json_body>"))>`
 
 Server verifies:
 - timestamp is within `HMAC_WINDOW_SECONDS` (default: 120s)
-- signature matches (uses constant-time compare)
+- signature matches (constant-time compare)
 
-### Enforcing HMAC-only mode
-Set in `server/.env`:
+Enforce HMAC-only (for secret mode):
 ```env
 ALLOW_LEGACY_SECRET=false
 ```
-Then the server will reject requests without `X-Timestamp` + `X-Signature`.
 
 ### Reliability (Android)
 Android uses **WorkManager** to queue SMS forwarding and retry with exponential backoff when the server/Telegram is temporarily unavailable. This can introduce a small delay after the server comes back online (expected).
@@ -126,16 +143,30 @@ Health check (on the PC):
 ---
 
 ## 3) Test sending a fake SMS payload (from PC)
+
+### A) Create an account + get a token
 PowerShell:
 ```powershell
+$signup = @{
+  username = "billy"
+  email    = "billy@example.com"
+  password = "change-me"
+} | ConvertTo-Json
+
+$r = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:3000/auth/signup" -ContentType "application/json" -Body $signup
+$token = $r.token
+$token
+```
+
+### B) Send a fake SMS with Bearer token
+```powershell
 $body = @{
-  secret = "YOUR_SECRET_HERE"
   from   = "+8613800138000"
   body   = "Test"
   receivedAt = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ssK")
 } | ConvertTo-Json
 
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:3000/sms/incoming" -ContentType "application/json" -Body $body
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:3000/sms/incoming" -ContentType "application/json" -Headers @{ Authorization = "Bearer $token" } -Body $body
 ```
 
 Expected Telegram message format:

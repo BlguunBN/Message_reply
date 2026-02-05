@@ -24,10 +24,11 @@ class SmsForwardWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val endpoint = inputData.getString(KEY_ENDPOINT) ?: return@withContext Result.failure()
         val jsonBody = inputData.getString(KEY_JSON) ?: return@withContext Result.failure()
-        val secret = inputData.getString(KEY_SECRET) ?: ""
+        val secret = inputData.getString(KEY_SECRET) ?: "" // legacy fallback
+        val token = inputData.getString(KEY_TOKEN) ?: ""
 
         try {
-            val (code, errBody) = postJson(endpoint, jsonBody, secret)
+            val (code, errBody) = postJson(endpoint, jsonBody, secret, token)
 
             // Decide retry vs fail
             return@withContext when {
@@ -58,7 +59,7 @@ class SmsForwardWorker(
         }
     }
 
-    private fun postJson(url: String, jsonBody: String, secret: String): Pair<Int, String?> {
+    private fun postJson(url: String, jsonBody: String, secret: String, token: String): Pair<Int, String?> {
         val conn = (URL(url).openConnection() as HttpURLConnection)
         try {
             conn.requestMethod = "POST"
@@ -66,7 +67,12 @@ class SmsForwardWorker(
             conn.readTimeout = 10_000
             conn.setRequestProperty("Content-Type", "application/json")
 
-            // Optional HMAC auth headers (recommended). We still send legacy JSON secret.
+            // Preferred auth: Bearer token
+            if (token.isNotBlank()) {
+                conn.setRequestProperty("Authorization", "Bearer $token")
+            }
+
+            // Optional secret/HMAC fallback (only works if server ALLOW_SECRET_AUTH=true)
             if (secret.isNotBlank()) {
                 val ts = (System.currentTimeMillis() / 1000L).toString()
                 val sig = hmacSha256Hex(secret, "$ts.$jsonBody")
@@ -100,13 +106,15 @@ class SmsForwardWorker(
 
         const val KEY_ENDPOINT = "endpoint"
         const val KEY_JSON = "json"
-        const val KEY_SECRET = "secret"
+        const val KEY_SECRET = "secret" // legacy fallback
+        const val KEY_TOKEN = "token"
 
-        fun inputData(endpoint: String, json: String, secret: String): Data =
+        fun inputData(endpoint: String, json: String, secret: String, token: String): Data =
             Data.Builder()
                 .putString(KEY_ENDPOINT, endpoint)
                 .putString(KEY_JSON, json)
                 .putString(KEY_SECRET, secret)
+                .putString(KEY_TOKEN, token)
                 .build()
 
         val backoffPolicy: BackoffPolicy = BackoffPolicy.EXPONENTIAL
