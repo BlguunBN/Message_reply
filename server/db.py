@@ -172,6 +172,18 @@ def get_user_by_identifier(*, db_path: str, identifier: str):
         conn.close()
 
 
+def update_user_password_hash(*, db_path: str, user_id: int, password_hash: str) -> None:
+    conn = connect(db_path)
+    try:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (password_hash, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def create_api_token(*, db_path: str, user_id: int, token_hash: str) -> int:
     conn = connect(db_path)
     try:

@@ -20,6 +20,7 @@ from db import (
     init_db,
     mark_telegram_result,
     try_insert_incoming,
+    update_user_password_hash,
 )
 
 load_dotenv()
@@ -33,7 +34,9 @@ PORT = int(os.getenv("PORT", "3000"))
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "true").strip().lower() in ("1", "true", "yes", "y")
 ALLOW_SECRET_AUTH = os.getenv("ALLOW_SECRET_AUTH", "false").strip().lower() in ("1", "true", "yes", "y")
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing
+# Prefer argon2 (no 72-byte password limitation like bcrypt). Keep bcrypt support for old hashes.
+pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
 # Telegram formatting
 # - "plain": send as plain text
@@ -253,6 +256,15 @@ def auth_login(req: LoginRequest):
 
     if not pwd_context.verify(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Bad credentials")
+
+    # If the stored hash is using an older scheme/params, upgrade it transparently.
+    try:
+        if pwd_context.needs_update(user["password_hash"]):
+            new_hash = pwd_context.hash(req.password)
+            update_user_password_hash(db_path=DB_PATH, user_id=int(user["id"]), password_hash=new_hash)
+    except Exception:
+        # best-effort; don't block login
+        pass
 
     token = os.urandom(32).hex()
     create_api_token(db_path=DB_PATH, user_id=int(user["id"]), token_hash=_hash_token(token))
