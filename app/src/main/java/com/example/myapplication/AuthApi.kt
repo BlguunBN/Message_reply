@@ -52,7 +52,7 @@ object AuthApi {
             }
 
             val resp = JSONObject(text)
-            val token = resp.optString("token", null)
+            val token = if (resp.isNull("token")) null else resp.optString("token", null as String?)
             AuthResult(ok = resp.optBoolean("ok", false), token = token, error = null)
         } catch (e: Exception) {
             AuthResult(ok = false, token = null, error = e.toString())
