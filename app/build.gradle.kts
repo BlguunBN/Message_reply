@@ -48,6 +48,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation("androidx.compose.runtime:runtime-livedata")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.compose.material:material-icons-extended")
 
     // Needed for background work + retry scheduling.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

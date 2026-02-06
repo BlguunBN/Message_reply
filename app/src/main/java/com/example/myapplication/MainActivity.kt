@@ -5,17 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -26,19 +22,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
-import com.example.myapplication.ui.AppScreen
-import com.example.myapplication.ui.DebugScreen
-import com.example.myapplication.ui.SettingsScreen
-import com.example.myapplication.ui.StatusScreen
+import com.example.myapplication.ui.app.AppScaffold
+import com.example.myapplication.ui.app.OnboardingScreen
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,7 +40,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    AuthGate(modifier = Modifier.padding(innerPadding))
+                    Root(modifier = Modifier.padding(innerPadding))
                 }
             }
         }
@@ -59,25 +48,42 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AuthGate(modifier: Modifier = Modifier) {
+fun Root(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
+    val cfg = LocalConfiguration.current
+
+    val isWide = cfg.screenWidthDp >= 600
+
     var token by remember { mutableStateOf("") }
+    var onboardingDone by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         token = AppConfig.getAuthToken(ctx)
     }
 
     if (token.isBlank()) {
-        AuthScreen(modifier = modifier, onAuthed = { newToken ->
-            AppConfig.setAuthToken(ctx, newToken)
-            token = newToken
-        })
+        if (!onboardingDone) {
+            OnboardingScreen(
+                modifier = modifier,
+                onContinue = { onboardingDone = true }
+            )
+        } else {
+            AuthScreen(
+                modifier = modifier,
+                onAuthed = { newToken ->
+                    AppConfig.setAuthToken(ctx, newToken)
+                    token = newToken
+                }
+            )
+        }
     } else {
-        AppRoot(
+        AppScaffold(
             modifier = modifier,
+            isWide = isWide,
             onLogout = {
                 AppConfig.clearAuth(ctx)
                 token = ""
+                onboardingDone = false
             }
         )
     }
