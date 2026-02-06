@@ -34,10 +34,12 @@ fun SettingsScreen(
     serverUrl: String,
     secret: String,
     useHmacOnly: Boolean,
+    isLoggedIn: Boolean,
     onServerUrlChange: (String) -> Unit,
     onSecretChange: (String) -> Unit,
     onUseHmacOnlyChange: (Boolean) -> Unit,
     onSaved: (String) -> Unit,
+    onLogout: () -> Unit,
 ) {
     val ctx = LocalContext.current
 
@@ -77,6 +79,19 @@ fun SettingsScreen(
         }
         Spacer(Modifier.height(8.dp))
         Text(permissionStatus)
+
+        Spacer(Modifier.height(16.dp))
+        Text("Account")
+        Spacer(Modifier.height(8.dp))
+        Text(if (isLoggedIn) "Logged in" else "Not logged in")
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = onLogout,
+            enabled = isLoggedIn,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Logout")
+        }
 
         Spacer(Modifier.height(16.dp))
         Text("Server")

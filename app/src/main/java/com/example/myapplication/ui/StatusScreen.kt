@@ -37,6 +37,7 @@ fun StatusScreen(
     modifier: Modifier = Modifier,
     serverUrl: String,
     useHmacOnly: Boolean,
+    isLoggedIn: Boolean,
     manualTestWorkInfos: List<WorkInfo>,
     smsForwardWorkInfos: List<WorkInfo>,
     summarizeWorkState: (List<WorkInfo>) -> String,
@@ -74,6 +75,7 @@ fun StatusScreen(
                 Spacer(Modifier.height(6.dp))
                 Text("Server: $serverUrl")
                 Text("HMAC-only: $useHmacOnly")
+                Text("Logged in: ${if (isLoggedIn) "yes" else "no"}")
             }
         }
 

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Button
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -28,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -75,7 +73,13 @@ fun AuthGate(modifier: Modifier = Modifier) {
             token = newToken
         })
     } else {
-        AppRoot(modifier = modifier)
+        AppRoot(
+            modifier = modifier,
+            onLogout = {
+                AppConfig.clearAuth(ctx)
+                token = ""
+            }
+        )
     }
 }
 
@@ -263,7 +267,10 @@ private fun summarizeWorkState(infos: List<WorkInfo>): String {
 }
 
 @Composable
-fun AppRoot(modifier: Modifier = Modifier) {
+fun AppRoot(
+    modifier: Modifier = Modifier,
+    onLogout: () -> Unit,
+) {
     val ctx = LocalContext.current
 
     var serverUrl by remember { mutableStateOf("") }
@@ -314,6 +321,7 @@ fun AppRoot(modifier: Modifier = Modifier) {
                     StatusScreen(
                         serverUrl = serverUrl,
                         useHmacOnly = useHmacOnly,
+                        isLoggedIn = AppConfig.getAuthToken(ctx).isNotBlank(),
                         manualTestWorkInfos = manualTestWorkInfos,
                         smsForwardWorkInfos = smsForwardWorkInfos,
                         summarizeWorkState = ::summarizeWorkState,
@@ -326,10 +334,12 @@ fun AppRoot(modifier: Modifier = Modifier) {
                         serverUrl = serverUrl,
                         secret = secret,
                         useHmacOnly = useHmacOnly,
+                        isLoggedIn = AppConfig.getAuthToken(ctx).isNotBlank(),
                         onServerUrlChange = { serverUrl = it },
                         onSecretChange = { secret = it },
                         onUseHmacOnlyChange = { useHmacOnly = it },
-                        onSaved = { /* TODO snackbar */ }
+                        onSaved = { /* TODO snackbar */ },
+                        onLogout = onLogout,
                     )
                 }
 
