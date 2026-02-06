@@ -6,11 +6,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -120,7 +122,7 @@ fun AuthScreen(modifier: Modifier = Modifier, onAuthed: (String) -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.Top
     ) {
-        Text("SMS → Telegram Bridge")
+        Text("Message Reply")
         Spacer(Modifier.height(12.dp))
 
         OutlinedTextField(
@@ -202,6 +204,7 @@ fun AuthScreen(modifier: Modifier = Modifier, onAuthed: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(8.dp))
+
             val pwBytes = password2.encodeToByteArray().size
             val pwTooLong = pwBytes > 72
 
@@ -215,7 +218,7 @@ fun AuthScreen(modifier: Modifier = Modifier, onAuthed: (String) -> Unit) {
             Spacer(Modifier.height(6.dp))
             if (pwTooLong) {
                 Text(
-                    text = "⚠ Password is ${pwBytes} bytes. Max is 72 bytes (bcrypt limit). Use a shorter password.",
+                    text = "Password is ${pwBytes} bytes. If server uses bcrypt, max is 72 bytes.",
                     color = androidx.compose.material3.MaterialTheme.colorScheme.error
                 )
             } else {
@@ -276,106 +279,5 @@ private fun RowButtons(
             modifier = Modifier.weight(1f),
             enabled = active != "signup"
         ) { Text(right) }
-    }
-}
-
-private fun summarizeWorkState(infos: List<WorkInfo>): String {
-    if (infos.isEmpty()) return "(none)"
-    val preferred = infos.firstOrNull { it.state == WorkInfo.State.RUNNING }
-        ?: infos.firstOrNull { it.state == WorkInfo.State.ENQUEUED }
-        ?: infos.last()
-    return "${preferred.state} (attempts=${preferred.runAttemptCount})"
-}
-
-@Composable
-fun AppRoot(
-    modifier: Modifier = Modifier,
-    onLogout: () -> Unit,
-) {
-    val ctx = LocalContext.current
-
-    var serverUrl by remember { mutableStateOf("") }
-    var secret by remember { mutableStateOf("") }
-    var useHmacOnly by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        serverUrl = AppConfig.getServerBaseUrl(ctx)
-        secret = AppConfig.getSecret(ctx)
-        useHmacOnly = AppConfig.getUseHmacOnly(ctx)
-    }
-
-    val wm = remember { WorkManager.getInstance(ctx) }
-    val manualTestWorkInfos by wm.getWorkInfosForUniqueWorkLiveData("manual-test")
-        .observeAsState(initial = emptyList())
-
-    val smsForwardWorkInfos by wm.getWorkInfosByTagLiveData(SmsForwardWorker.TAG_SMS_FORWARD)
-        .observeAsState(initial = emptyList())
-
-    val nav = rememberNavController()
-    val tabs = listOf(AppScreen.Status, AppScreen.Settings, AppScreen.Debug)
-
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        bottomBar = {
-            NavigationBar {
-                val current = nav.currentBackStackEntry?.destination?.route
-                tabs.forEach { screen ->
-                    NavigationBarItem(
-                        selected = current == screen.route,
-                        onClick = {
-                            nav.navigate(screen.route) {
-                                launchSingleTop = true
-                                popUpTo(AppScreen.Status.route) { saveState = true }
-                                restoreState = true
-                            }
-                        },
-                        icon = { /* no icons for now */ },
-                        label = { Text(screen.label) }
-                    )
-                }
-            }
-        }
-    ) { inner ->
-        Box(Modifier.padding(inner)) {
-            NavHost(navController = nav, startDestination = AppScreen.Status.route) {
-                composable(AppScreen.Status.route) {
-                    StatusScreen(
-                        serverUrl = serverUrl,
-                        useHmacOnly = useHmacOnly,
-                        isLoggedIn = AppConfig.getAuthToken(ctx).isNotBlank(),
-                        manualTestWorkInfos = manualTestWorkInfos,
-                        smsForwardWorkInfos = smsForwardWorkInfos,
-                        summarizeWorkState = ::summarizeWorkState,
-                        onRefresh = { /* handled inside */ },
-                    )
-                }
-
-                composable(AppScreen.Settings.route) {
-                    SettingsScreen(
-                        serverUrl = serverUrl,
-                        secret = secret,
-                        useHmacOnly = useHmacOnly,
-                        isLoggedIn = AppConfig.getAuthToken(ctx).isNotBlank(),
-                        onServerUrlChange = { serverUrl = it },
-                        onSecretChange = { secret = it },
-                        onUseHmacOnlyChange = { useHmacOnly = it },
-                        onSaved = { /* TODO snackbar */ },
-                        onLogout = onLogout,
-                    )
-                }
-
-                composable(AppScreen.Debug.route) {
-                    DebugScreen(
-                        serverUrl = serverUrl,
-                        secret = secret,
-                        useHmacOnly = useHmacOnly,
-                        manualTestWorkInfos = manualTestWorkInfos,
-                        smsForwardWorkInfos = smsForwardWorkInfos,
-                        summarizeWorkState = ::summarizeWorkState,
-                        onStatus = { /* TODO snackbar */ }
-                    )
-                }
-            }
-        }
     }
 }
