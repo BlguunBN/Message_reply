@@ -40,7 +40,8 @@ app = FastAPI(title="Message_reply: SMS → Telegram (v0.3)")
 
 
 class IncomingSMS(BaseModel):
-    secret: str
+    # secret is only required for legacy auth. If HMAC headers are used, this can be omitted.
+    secret: Optional[str] = None
     from_number: str = Field(alias="from")
     body: str
     receivedAt: Optional[str] = None  # ISO timestamp string (optional)
@@ -177,7 +178,7 @@ async def sms_incoming(request: Request, payload: IncomingSMS):
         if not ALLOW_LEGACY_SECRET:
             raise HTTPException(status_code=401, detail="HMAC required")
         # Legacy fallback
-        if payload.secret != SECRET:
+        if (payload.secret or "") != SECRET:
             raise HTTPException(status_code=401, detail="Bad secret")
 
     fingerprint = _compute_fingerprint(payload.from_number, payload.body, payload.receivedAt)
