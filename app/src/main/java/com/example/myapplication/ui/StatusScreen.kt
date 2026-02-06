@@ -88,7 +88,7 @@ fun StatusScreen(
                 val manualCounts = countStates(manualTestWorkInfos)
                 if (manualTestWorkInfos.isNotEmpty()) {
                     Text(
-                        "  RUNNING=${manualCounts.running} ENQUEUED=${manualCounts.enqueued} SUCCEEDED=${manualCounts.succeeded} FAILED=${manualCounts.failed}"
+                        "  RUNNING=${manualCounts.running} ENQUEUED=${manualCounts.enqueued} BLOCKED=${manualCounts.blocked} SUCCEEDED=${manualCounts.succeeded} FAILED=${manualCounts.failed} CANCELLED=${manualCounts.cancelled}"
                     )
                 }
 
@@ -98,7 +98,7 @@ fun StatusScreen(
                 val smsCounts = countStates(smsForwardWorkInfos)
                 if (smsForwardWorkInfos.isNotEmpty()) {
                     Text(
-                        "  RUNNING=${smsCounts.running} ENQUEUED=${smsCounts.enqueued} SUCCEEDED=${smsCounts.succeeded} FAILED=${smsCounts.failed}"
+                        "  RUNNING=${smsCounts.running} ENQUEUED=${smsCounts.enqueued} BLOCKED=${smsCounts.blocked} SUCCEEDED=${smsCounts.succeeded} FAILED=${smsCounts.failed} CANCELLED=${smsCounts.cancelled}"
                     )
                 }
 
@@ -232,6 +232,8 @@ private data class WorkStateCounts(
     val enqueued: Int,
     val succeeded: Int,
     val failed: Int,
+    val blocked: Int,
+    val cancelled: Int,
 )
 
 private fun countStates(infos: List<WorkInfo>): WorkStateCounts {
@@ -239,6 +241,8 @@ private fun countStates(infos: List<WorkInfo>): WorkStateCounts {
     var enqueued = 0
     var succeeded = 0
     var failed = 0
+    var blocked = 0
+    var cancelled = 0
 
     infos.forEach { wi ->
         when (wi.state) {
@@ -246,9 +250,8 @@ private fun countStates(infos: List<WorkInfo>): WorkStateCounts {
             WorkInfo.State.ENQUEUED -> enqueued++
             WorkInfo.State.SUCCEEDED -> succeeded++
             WorkInfo.State.FAILED -> failed++
-            else -> {
-                // BLOCKED/CANCELLED are ignored for now to keep UI simple.
-            }
+            WorkInfo.State.BLOCKED -> blocked++
+            WorkInfo.State.CANCELLED -> cancelled++
         }
     }
 
@@ -257,6 +260,8 @@ private fun countStates(infos: List<WorkInfo>): WorkStateCounts {
         enqueued = enqueued,
         succeeded = succeeded,
         failed = failed,
+        blocked = blocked,
+        cancelled = cancelled,
     )
 }
 
