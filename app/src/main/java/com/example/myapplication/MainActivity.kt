@@ -240,7 +240,13 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             Text("Last forward: (none yet)")
         } else {
             val whenStr = if (last.attemptAtEpochMs > 0L) {
-                "${last.attemptAtEpochMs}ms"
+                try {
+                    val inst = java.time.Instant.ofEpochMilli(last.attemptAtEpochMs)
+                    val zdt = java.time.ZonedDateTime.ofInstant(inst, java.time.ZoneId.systemDefault())
+                    zdt.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                } catch (_: Exception) {
+                    last.attemptAtEpochMs.toString()
+                }
             } else "(unknown time)"
 
             Text("Last forward:")
