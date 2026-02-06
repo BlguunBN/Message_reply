@@ -30,6 +30,15 @@ class SmsForwardWorker(
         try {
             val (code, errBody) = postJson(endpoint, jsonBody, secret, token)
 
+            // Record status for UI debugging
+            AppConfig.recordLastForwardAttempt(
+                ctx = applicationContext,
+                endpoint = endpoint,
+                attemptAtEpochMs = System.currentTimeMillis(),
+                httpCode = code,
+                errorBody = errBody
+            )
+
             // Decide retry vs fail
             return@withContext when {
                 code in 200..299 -> Result.success()
@@ -50,10 +59,25 @@ class SmsForwardWorker(
                 }
             }
         } catch (e: IOException) {
+            // Record the exception so UI shows something useful even if we never got an HTTP code.
+            AppConfig.recordLastForwardAttempt(
+                ctx = applicationContext,
+                endpoint = endpoint,
+                attemptAtEpochMs = System.currentTimeMillis(),
+                httpCode = 0,
+                errorBody = e.toString()
+            )
             Log.w(TAG, "Network error; will retry", e)
             return@withContext Result.retry()
         } catch (e: Exception) {
             // Unknown errors: retry a few times; WorkManager will stop after runAttemptCount cap
+            AppConfig.recordLastForwardAttempt(
+                ctx = applicationContext,
+                endpoint = endpoint,
+                attemptAtEpochMs = System.currentTimeMillis(),
+                httpCode = 0,
+                errorBody = e.toString()
+            )
             Log.e(TAG, "Unexpected error; will retry", e)
             return@withContext Result.retry()
         }
@@ -65,7 +89,12 @@ class SmsForwardWorker(
             conn.requestMethod = "POST"
             conn.connectTimeout = 10_000
             conn.readTimeout = 10_000
+            conn.useCaches = false
             conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Accept", "application/json")
+            // Helps avoid some HTTP/1.1 keep-alive edge cases that can manifest as
+            // ProtocolException: unexpected end of stream
+            conn.setRequestProperty("Connection", "close")
 
             // Preferred auth: Bearer token
             if (token.isNotBlank()) {
@@ -80,8 +109,14 @@ class SmsForwardWorker(
                 conn.setRequestProperty("X-Signature", sig)
             }
 
+            val bytes = jsonBody.toByteArray(Charsets.UTF_8)
             conn.doOutput = true
-            conn.outputStream.use { it.write(jsonBody.toByteArray(Charsets.UTF_8)) }
+            // Avoid chunked encoding; some servers/proxies behave badly.
+            conn.setFixedLengthStreamingMode(bytes.size)
+            conn.outputStream.use {
+                it.write(bytes)
+                it.flush()
+            }
 
             val code = conn.responseCode
             val err = if (code !in 200..299) {
@@ -103,6 +138,7 @@ class SmsForwardWorker(
 
     companion object {
         private const val TAG = "SmsForwardWorker"
+        const val TAG_SMS_FORWARD = "sms-forward"
 
         const val KEY_ENDPOINT = "endpoint"
         const val KEY_JSON = "json"
