@@ -30,56 +30,119 @@ def connect(db_path: str) -> sqlite3.Connection:
     return conn
 
 
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+        (name,),
+    ).fetchone()
+    return row is not None
+
+
+def _get_schema_version(conn: sqlite3.Connection) -> int:
+    if not _table_exists(conn, "schema_migrations"):
+        return 0
+    row = conn.execute("SELECT MAX(version) AS v FROM schema_migrations").fetchone()
+    return int(row["v"] or 0)
+
+
+def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+        (version, _utc_now_iso()),
+    )
+
+
+def _ensure_migrations_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          version INTEGER PRIMARY KEY,
+          applied_at TEXT NOT NULL
+        )
+        """
+    )
+
+
 def init_db(db_path: str) -> None:
+    """Initialize DB and apply migrations.
+
+    Migration strategy:
+    - schema version 1 == baseline schema (sms_messages/users/api_tokens)
+    - Older DBs without schema_migrations will be detected and stamped as v1
+      if baseline tables already exist.
+    """
+
     conn = connect(db_path)
     try:
-        # v0: SMS log
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sms_messages (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              fingerprint TEXT NOT NULL UNIQUE,
-              from_number TEXT NOT NULL,
-              body TEXT NOT NULL,
-              received_at TEXT,
-              created_at TEXT NOT NULL,
-              telegram_message_id INTEGER,
-              telegram_error TEXT
-            )
-            """
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_sms_created_at ON sms_messages(created_at)")
+        _ensure_migrations_table(conn)
+        current = _get_schema_version(conn)
 
-        # v1: Users + API tokens
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              username TEXT NOT NULL UNIQUE,
-              email TEXT NOT NULL UNIQUE,
-              password_hash TEXT NOT NULL,
-              created_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at)")
+        # Define migrations (incremental)
+        migrations: list[tuple[int, list[str]]] = [
+            (
+                1,
+                [
+                    # v1 baseline schema
+                    """
+                    CREATE TABLE IF NOT EXISTS sms_messages (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      fingerprint TEXT NOT NULL UNIQUE,
+                      from_number TEXT NOT NULL,
+                      body TEXT NOT NULL,
+                      received_at TEXT,
+                      created_at TEXT NOT NULL,
+                      telegram_message_id INTEGER,
+                      telegram_error TEXT
+                    )
+                    """,
+                    "CREATE INDEX IF NOT EXISTS idx_sms_created_at ON sms_messages(created_at)",
+                    """
+                    CREATE TABLE IF NOT EXISTS users (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      username TEXT NOT NULL UNIQUE,
+                      email TEXT NOT NULL UNIQUE,
+                      password_hash TEXT NOT NULL,
+                      created_at TEXT NOT NULL
+                    )
+                    """,
+                    "CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at)",
+                    """
+                    CREATE TABLE IF NOT EXISTS api_tokens (
+                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      user_id INTEGER NOT NULL,
+                      token_hash TEXT NOT NULL UNIQUE,
+                      created_at TEXT NOT NULL,
+                      last_used_at TEXT,
+                      revoked_at TEXT,
+                      FOREIGN KEY (user_id) REFERENCES users(id)
+                    )
+                    """,
+                    "CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens(user_id)",
+                ],
+            ),
+        ]
 
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS api_tokens (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              user_id INTEGER NOT NULL,
-              token_hash TEXT NOT NULL UNIQUE,
-              created_at TEXT NOT NULL,
-              last_used_at TEXT,
-              revoked_at TEXT,
-              FOREIGN KEY (user_id) REFERENCES users(id)
+        if current == 0:
+            # If this is an existing DB from older versions, stamp it as v1 if tables exist.
+            has_baseline = all(
+                _table_exists(conn, t)
+                for t in ("sms_messages", "users", "api_tokens")
             )
-            """
-        )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens(user_id)")
+            if has_baseline:
+                _set_schema_version(conn, 1)
+                conn.commit()
+                current = 1
 
-        conn.commit()
+        # Apply missing migrations
+        for version, statements in migrations:
+            if version <= current:
+                continue
+            for stmt in statements:
+                conn.execute(stmt)
+            _set_schema_version(conn, version)
+            conn.commit()
+            current = version
+
     finally:
         conn.close()
 
