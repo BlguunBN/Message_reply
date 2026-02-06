@@ -29,12 +29,21 @@ class SmsForwardWorker(
         try {
             val (code, errBody) = postJson(endpoint, jsonBody, secret)
 
+            // Record status for UI debugging
+            AppConfig.recordLastForwardAttempt(
+                ctx = applicationContext,
+                endpoint = endpoint,
+                attemptAtEpochMs = System.currentTimeMillis(),
+                httpCode = code,
+                errorBody = errBody
+            )
+
             // Decide retry vs fail
             return@withContext when {
                 code in 200..299 -> Result.success()
                 code == 401 -> {
-                    // Bad secret is not retryable.
-                    Log.e(TAG, "Unauthorized (bad secret). Not retrying.")
+                    // Bad secret/signature is not retryable.
+                    Log.e(TAG, "Unauthorized. Not retrying.")
                     Result.failure()
                 }
                 code in 400..499 -> {
@@ -66,7 +75,7 @@ class SmsForwardWorker(
             conn.readTimeout = 10_000
             conn.setRequestProperty("Content-Type", "application/json")
 
-            // Optional HMAC auth headers (recommended). We still send legacy JSON secret.
+            // Optional HMAC auth headers (recommended).
             if (secret.isNotBlank()) {
                 val ts = (System.currentTimeMillis() / 1000L).toString()
                 val sig = hmacSha256Hex(secret, "$ts.$jsonBody")
@@ -79,7 +88,11 @@ class SmsForwardWorker(
 
             val code = conn.responseCode
             val err = if (code !in 200..299) {
-                try { conn.errorStream?.readBytes()?.toString(Charsets.UTF_8) } catch (_: Exception) { null }
+                try {
+                    conn.errorStream?.readBytes()?.toString(Charsets.UTF_8)
+                } catch (_: Exception) {
+                    null
+                }
             } else null
 
             return code to err

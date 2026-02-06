@@ -33,6 +33,9 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         val secret = AppConfig.getSecret(context)
+        val useHmacOnly = AppConfig.getUseHmacOnly(context)
+
+        // Note: We still need the shared secret to compute the HMAC signature.
         if (secret.isBlank()) {
             Log.w("SmsReceiver", "Secret not set; ignoring incoming SMS")
             return
@@ -42,7 +45,7 @@ class SmsReceiver : BroadcastReceiver() {
         val endpoint = "$baseUrl/sms/incoming"
 
         val json = JSONObject().apply {
-            put("secret", secret)
+            if (!useHmacOnly) put("secret", secret) // legacy fallback only
             put("from", from)
             put("body", body)
             if (receivedAt != null) put("receivedAt", receivedAt)
