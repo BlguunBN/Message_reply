@@ -62,6 +62,7 @@ class SmsReceiver : BroadcastReceiver() {
             .build()
 
         val req = OneTimeWorkRequestBuilder<SmsForwardWorker>()
+            .addTag(SmsForwardWorker.TAG_SMS_FORWARD)
             .setConstraints(constraints)
             .setInputData(SmsForwardWorker.inputData(endpoint, jsonStr, secret))
             .setBackoffCriteria(

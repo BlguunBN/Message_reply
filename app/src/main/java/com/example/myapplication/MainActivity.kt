@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +39,7 @@ import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import org.json.JSONObject
@@ -72,6 +74,22 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
     fun refreshLastStatus() {
         lastForwardStatus = AppConfig.getLastForwardStatus(ctx)
+    }
+
+    val wm = remember { WorkManager.getInstance(ctx) }
+    val manualTestWorkInfos by wm.getWorkInfosForUniqueWorkLiveData("manual-test")
+        .observeAsState(initial = emptyList())
+
+    val smsForwardWorkInfos by wm.getWorkInfosByTagLiveData(SmsForwardWorker.TAG_SMS_FORWARD)
+        .observeAsState(initial = emptyList())
+
+    fun summarizeWorkState(infos: List<WorkInfo>): String {
+        if (infos.isEmpty()) return "(none)"
+        // Prefer RUNNING, else ENQUEUED, else last item.
+        val preferred = infos.firstOrNull { it.state == WorkInfo.State.RUNNING }
+            ?: infos.firstOrNull { it.state == WorkInfo.State.ENQUEUED }
+            ?: infos.last()
+        return "${preferred.state} (attempts=${preferred.runAttemptCount})"
     }
 
     LaunchedEffect(Unit) {
@@ -202,6 +220,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                     .build()
 
                 val req = OneTimeWorkRequestBuilder<SmsForwardWorker>()
+                    .addTag(SmsForwardWorker.TAG_SMS_FORWARD)
                     .setConstraints(constraints)
                     .setInputData(SmsForwardWorker.inputData(endpoint, json, s))
                     .setBackoffCriteria(
@@ -217,7 +236,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 status = "✅ Enqueued test send (manual-test). Check status below."
             },
             modifier = Modifier.fillMaxWidth()
-        ) {
+        ) { 
             Text("Send test message")
         }
 
@@ -235,6 +254,12 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(12.dp))
 
+        Text("WorkManager status:")
+        Text("- manual-test: ${summarizeWorkState(manualTestWorkInfos)}")
+        Text("- sms-forward jobs: ${summarizeWorkState(smsForwardWorkInfos)} (count=${smsForwardWorkInfos.size})")
+
+        Spacer(Modifier.height(12.dp))
+
         val last = lastForwardStatus
         if (!last.hasData) {
             Text("Last forward: (none yet)")
@@ -249,7 +274,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                 }
             } else "(unknown time)"
 
-            Text("Last forward:")
+            Text("Last HTTP result:")
             Text("- ok: ${last.ok}")
             Text("- http: ${last.httpCode}")
             Text("- when: $whenStr")

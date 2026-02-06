@@ -46,6 +46,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.runtime:runtime-livedata")
 
     // Needed for background work + retry scheduling.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

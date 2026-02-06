@@ -111,6 +111,8 @@ class SmsForwardWorker(
     companion object {
         private const val TAG = "SmsForwardWorker"
 
+        const val TAG_SMS_FORWARD = "sms-forward"
+
         const val KEY_ENDPOINT = "endpoint"
         const val KEY_JSON = "json"
         const val KEY_SECRET = "secret"
