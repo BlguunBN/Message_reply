@@ -68,8 +68,10 @@ fun DebugScreen(
         Button(
             onClick = {
                 val s = secret.trim()
-                if (s.isBlank()) {
-                    onStatus("❌ Secret is blank. Set secret first.")
+                val token = AppConfig.getAuthToken(ctx)
+
+                if (token.isBlank() && s.isBlank()) {
+                    onStatus("❌ Not logged in and secret is blank. Log in or set secret.")
                     return@Button
                 }
 
@@ -96,7 +98,7 @@ fun DebugScreen(
                 val req = OneTimeWorkRequestBuilder<SmsForwardWorker>()
                     .addTag(SmsForwardWorker.TAG_SMS_FORWARD)
                     .setConstraints(constraints)
-                    .setInputData(SmsForwardWorker.inputData(endpoint, json, s))
+                    .setInputData(SmsForwardWorker.inputData(endpoint, json, s, token))
                     .setBackoffCriteria(
                         SmsForwardWorker.backoffPolicy,
                         SmsForwardWorker.backoffDelay.toMillis(),

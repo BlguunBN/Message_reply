@@ -32,12 +32,11 @@ class SmsReceiver : BroadcastReceiver() {
             null
         }
 
-        val secret = AppConfig.getSecret(context)
-        val useHmacOnly = AppConfig.getUseHmacOnly(context)
+        val token = AppConfig.getAuthToken(context)
+        val secret = AppConfig.getSecret(context) // legacy fallback
 
-        // Note: We still need the shared secret to compute the HMAC signature.
-        if (secret.isBlank()) {
-            Log.w("SmsReceiver", "Secret not set; ignoring incoming SMS")
+        if (token.isBlank() && secret.isBlank()) {
+            Log.w("SmsReceiver", "Not authenticated (no token/secret); ignoring incoming SMS")
             return
         }
 
@@ -45,7 +44,8 @@ class SmsReceiver : BroadcastReceiver() {
         val endpoint = "$baseUrl/sms/incoming"
 
         val json = JSONObject().apply {
-            if (!useHmacOnly) put("secret", secret) // legacy fallback only
+            // Secret is legacy; keep sending if configured (server may ignore).
+            if (secret.isNotBlank()) put("secret", secret)
             put("from", from)
             put("body", body)
             if (receivedAt != null) put("receivedAt", receivedAt)
@@ -62,9 +62,8 @@ class SmsReceiver : BroadcastReceiver() {
             .build()
 
         val req = OneTimeWorkRequestBuilder<SmsForwardWorker>()
-            .addTag(SmsForwardWorker.TAG_SMS_FORWARD)
             .setConstraints(constraints)
-            .setInputData(SmsForwardWorker.inputData(endpoint, jsonStr, secret))
+            .setInputData(SmsForwardWorker.inputData(endpoint, jsonStr, secret, token))
             .setBackoffCriteria(
                 SmsForwardWorker.backoffPolicy,
                 SmsForwardWorker.backoffDelay.toMillis(),
