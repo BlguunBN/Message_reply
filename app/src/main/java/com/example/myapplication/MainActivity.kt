@@ -196,6 +196,9 @@ fun AuthScreen(modifier: Modifier = Modifier, onAuthed: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(8.dp))
+            val pwBytes = password2.encodeToByteArray().size
+            val pwTooLong = pwBytes > 72
+
             OutlinedTextField(
                 value = password2,
                 onValueChange = { password2 = it },
@@ -203,10 +206,22 @@ fun AuthScreen(modifier: Modifier = Modifier, onAuthed: (String) -> Unit) {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(Modifier.height(6.dp))
+            if (pwTooLong) {
+                Text(
+                    text = "⚠ Password is ${pwBytes} bytes. Max is 72 bytes (bcrypt limit). Use a shorter password.",
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.error
+                )
+            } else {
+                Text(
+                    text = "Password length: ${pwBytes}/72 bytes (bcrypt limit)",
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Spacer(Modifier.height(12.dp))
             Button(
-                enabled = !busy,
+                enabled = !busy && !pwTooLong,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     AppConfig.setServerBaseUrl(ctx, serverUrl)
@@ -226,7 +241,7 @@ fun AuthScreen(modifier: Modifier = Modifier, onAuthed: (String) -> Unit) {
                     }
                 }
             ) {
-                Text("Sign up")
+                Text(if (pwTooLong) "Password too long" else "Sign up")
             }
         }
 
