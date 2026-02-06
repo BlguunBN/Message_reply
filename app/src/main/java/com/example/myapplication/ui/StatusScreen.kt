@@ -15,6 +15,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,10 +47,22 @@ fun StatusScreen(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val last = AppConfig.getLastForwardStatus(ctx)
+    var refreshNonce = remember { mutableIntStateOf(0) }
+
+    val last = remember(refreshNonce.intValue) {
+        AppConfig.getLastForwardStatus(ctx)
+    }
 
     val healthState = remember { mutableStateOf<HealthResult?>(null) }
     val healthBusy = remember { mutableStateOf(false) }
+
+    // Auto-refresh Last send card whenever WorkManager state changes.
+    LaunchedEffect(
+        manualTestWorkInfos,
+        smsForwardWorkInfos
+    ) {
+        refreshNonce.intValue++
+    }
 
     Column(
         modifier = modifier.padding(16.dp),
@@ -120,7 +134,13 @@ fun StatusScreen(
                 }
 
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        refreshNonce.intValue++
+                        onRefresh()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text("Refresh")
                 }
             }
