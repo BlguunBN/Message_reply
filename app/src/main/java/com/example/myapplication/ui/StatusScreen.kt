@@ -83,8 +83,25 @@ fun StatusScreen(
             Column(Modifier.padding(12.dp)) {
                 Text("WorkManager", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
+
                 Text("manual-test: ${summarizeWorkState(manualTestWorkInfos)}")
-                Text("sms-forward: ${summarizeWorkState(smsForwardWorkInfos)} (count=${smsForwardWorkInfos.size})")
+                val manualCounts = countStates(manualTestWorkInfos)
+                if (manualTestWorkInfos.isNotEmpty()) {
+                    Text(
+                        "  RUNNING=${manualCounts.running} ENQUEUED=${manualCounts.enqueued} SUCCEEDED=${manualCounts.succeeded} FAILED=${manualCounts.failed}"
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                Text("sms-forward: ${summarizeWorkState(smsForwardWorkInfos)} (total=${smsForwardWorkInfos.size})")
+                val smsCounts = countStates(smsForwardWorkInfos)
+                if (smsForwardWorkInfos.isNotEmpty()) {
+                    Text(
+                        "  RUNNING=${smsCounts.running} ENQUEUED=${smsCounts.enqueued} SUCCEEDED=${smsCounts.succeeded} FAILED=${smsCounts.failed}"
+                    )
+                }
+
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = {
@@ -208,6 +225,39 @@ private suspend fun checkHealth(serverUrl: String): HealthResult = withContext(D
     } catch (e: Exception) {
         HealthResult.Err(e.toString())
     }
+}
+
+private data class WorkStateCounts(
+    val running: Int,
+    val enqueued: Int,
+    val succeeded: Int,
+    val failed: Int,
+)
+
+private fun countStates(infos: List<WorkInfo>): WorkStateCounts {
+    var running = 0
+    var enqueued = 0
+    var succeeded = 0
+    var failed = 0
+
+    infos.forEach { wi ->
+        when (wi.state) {
+            WorkInfo.State.RUNNING -> running++
+            WorkInfo.State.ENQUEUED -> enqueued++
+            WorkInfo.State.SUCCEEDED -> succeeded++
+            WorkInfo.State.FAILED -> failed++
+            else -> {
+                // BLOCKED/CANCELLED are ignored for now to keep UI simple.
+            }
+        }
+    }
+
+    return WorkStateCounts(
+        running = running,
+        enqueued = enqueued,
+        succeeded = succeeded,
+        failed = failed,
+    )
 }
 
 private fun formatEpochMs(epochMs: Long): String {
