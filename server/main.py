@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 from datetime import datetime, timezone
+from uuid import uuid4
 from typing import Optional
 
 import httpx
@@ -305,6 +306,10 @@ async def sms_incoming(request: Request, payload: IncomingSMS):
             if (payload.secret or "") != SECRET:
                 raise HTTPException(status_code=401, detail="Bad secret")
 
+    # Observability metadata
+    request_id = uuid4().hex
+    auth_method = "bearer" if authed_user else ("hmac" if request.headers.get("x-signature") else "legacy_secret")
+
     fingerprint = _compute_fingerprint(payload.from_number, payload.body, payload.receivedAt)
     inserted, row_id = try_insert_incoming(
         db_path=DB_PATH,
@@ -312,6 +317,9 @@ async def sms_incoming(request: Request, payload: IncomingSMS):
         from_number=payload.from_number,
         body=payload.body,
         received_at=payload.receivedAt,
+        auth_method=auth_method,
+        request_id=request_id,
+        status="received",
     )
 
     if not inserted:

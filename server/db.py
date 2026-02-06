@@ -19,6 +19,9 @@ class MessageRecord:
     created_at: str
     telegram_message_id: Optional[int]
     telegram_error: Optional[str]
+    auth_method: Optional[str]
+    request_id: Optional[str]
+    status: Optional[str]
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -120,6 +123,18 @@ def init_db(db_path: str) -> None:
                     "CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens(user_id)",
                 ],
             ),
+            (
+                2,
+                [
+                    # v2: add metadata columns for debugging/observability
+                    "ALTER TABLE sms_messages ADD COLUMN auth_method TEXT",
+                    "ALTER TABLE sms_messages ADD COLUMN request_id TEXT",
+                    "ALTER TABLE sms_messages ADD COLUMN status TEXT NOT NULL DEFAULT 'received'",
+                    # Unique request id when present
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_sms_request_id ON sms_messages(request_id) WHERE request_id IS NOT NULL",
+                    "CREATE INDEX IF NOT EXISTS idx_sms_status_created_at ON sms_messages(status, created_at)",
+                ],
+            ),
         ]
 
         if current == 0:
@@ -154,6 +169,9 @@ def try_insert_incoming(
     from_number: str,
     body: str,
     received_at: Optional[str],
+    auth_method: Optional[str],
+    request_id: Optional[str],
+    status: str = "received",
 ) -> tuple[bool, int]:
     """Returns (inserted, row_id). If duplicate fingerprint, inserted=False."""
     conn = connect(db_path)
@@ -162,10 +180,22 @@ def try_insert_incoming(
         try:
             cur.execute(
                 """
-                INSERT INTO sms_messages (fingerprint, from_number, body, received_at, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO sms_messages (
+                    fingerprint, from_number, body, received_at, created_at,
+                    auth_method, request_id, status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (fingerprint, from_number, body, received_at, _utc_now_iso()),
+                (
+                    fingerprint,
+                    from_number,
+                    body,
+                    received_at,
+                    _utc_now_iso(),
+                    auth_method,
+                    request_id,
+                    status,
+                ),
             )
             conn.commit()
             return True, int(cur.lastrowid)
@@ -186,15 +216,16 @@ def mark_telegram_result(
     telegram_message_id: Optional[int],
     telegram_error: Optional[str],
 ) -> None:
+    status = "sent" if not telegram_error else "telegram_error"
     conn = connect(db_path)
     try:
         conn.execute(
             """
             UPDATE sms_messages
-               SET telegram_message_id = ?, telegram_error = ?
+               SET telegram_message_id = ?, telegram_error = ?, status = ?
              WHERE id = ?
             """,
-            (telegram_message_id, telegram_error, row_id),
+            (telegram_message_id, telegram_error, status, row_id),
         )
         conn.commit()
     finally:
