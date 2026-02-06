@@ -2,6 +2,8 @@ package com.example.myapplication
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -90,6 +92,40 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             ?: infos.firstOrNull { it.state == WorkInfo.State.ENQUEUED }
             ?: infos.last()
         return "${preferred.state} (attempts=${preferred.runAttemptCount})"
+    }
+
+    fun copyDebugInfoToClipboard() {
+        val last = AppConfig.getLastForwardStatus(ctx)
+        val manualSummary = summarizeWorkState(manualTestWorkInfos)
+        val smsSummary = summarizeWorkState(smsForwardWorkInfos)
+
+        val whenStr = if (last.attemptAtEpochMs > 0L) {
+            try {
+                val inst = java.time.Instant.ofEpochMilli(last.attemptAtEpochMs)
+                val zdt = java.time.ZonedDateTime.ofInstant(inst, java.time.ZoneId.systemDefault())
+                zdt.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+            } catch (_: Exception) {
+                last.attemptAtEpochMs.toString()
+            }
+        } else "(unknown time)"
+
+        val sb = StringBuilder()
+        sb.appendLine("SMS Bridge Debug Info")
+        sb.appendLine("serverUrl=$serverUrl")
+        sb.appendLine("useHmacOnly=$useHmacOnly")
+        sb.appendLine("work.manualTest=$manualSummary")
+        sb.appendLine("work.smsForward=$smsSummary count=${smsForwardWorkInfos.size}")
+        sb.appendLine("last.ok=${last.ok}")
+        sb.appendLine("last.http=${last.httpCode}")
+        sb.appendLine("last.when=$whenStr")
+        sb.appendLine("last.endpoint=${last.endpoint ?: "(none)"}")
+        if (!last.errorBody.isNullOrBlank()) {
+            sb.appendLine("last.error=${last.errorBody}")
+        }
+
+        val clip = ClipData.newPlainText("sms-bridge-debug", sb.toString())
+        val clipboard = ctx.getSystemService(ClipboardManager::class.java)
+        clipboard?.setPrimaryClip(clip)
     }
 
     LaunchedEffect(Unit) {
@@ -250,6 +286,18 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Refresh status")
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Button(
+            onClick = {
+                copyDebugInfoToClipboard()
+                status = "📋 Copied debug info to clipboard"
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Copy debug info")
         }
 
         Spacer(Modifier.height(12.dp))
