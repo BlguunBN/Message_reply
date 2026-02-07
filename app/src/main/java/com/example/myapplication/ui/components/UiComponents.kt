@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -155,8 +157,13 @@ fun MessageBubble(
 
         Crossfade(targetState = msg.state == DeliveryState.FAILED, label = "failedActions") { failed ->
             if (failed) {
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(Modifier.height(Dimens.textNormalGap))
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (msg.incoming) Arrangement.Start else Arrangement.End,
+                    verticalArrangement = Arrangement.spacedBy(Dimens.sm)
+                ) {
                     if (onRetry != null) {
                         Button(onClick = onRetry) { Text("Retry") }
                     }
@@ -165,12 +172,12 @@ fun MessageBubble(
                     }
                 }
                 if (!msg.error.isNullOrBlank()) {
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(Dimens.textTightGap))
                     Text(
                         msg.error,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        modifier = Modifier.padding(horizontal = Dimens.xs)
                     )
                 }
             }

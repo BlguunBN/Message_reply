@@ -10,10 +10,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -27,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ui.components.MessageBubble
+import com.example.myapplication.ui.theme.Dimens
 import com.example.myapplication.ui.model.FakeData
 
 @Composable
@@ -43,7 +48,12 @@ fun ThreadScreen(
             TopAppBar(
                 title = { Text("Thread") },
                 navigationIcon = {
-                    Button(onClick = onBack) { Text("Back") }
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
                 }
             )
         }
@@ -52,14 +62,15 @@ fun ThreadScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(inner)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(Dimens.screenPadding)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(Dimens.md)
         ) {
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(Dimens.listItemSpacing)
             ) {
                 items(messages) { msg ->
                     MessageBubble(
@@ -70,14 +81,17 @@ fun ThreadScreen(
                 }
             }
 
-            Row(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.inlineGap)
+            ) {
                 OutlinedTextField(
                     value = composer,
                     onValueChange = { composer = it },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Message") },
+                    singleLine = true,
                 )
-                Spacer(Modifier.width(12.dp))
                 Button(
                     enabled = composer.isNotBlank(),
                     onClick = {
@@ -86,7 +100,7 @@ fun ThreadScreen(
                     }
                 ) { Text("Send") }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(Dimens.textTightGap))
             Text(
                 "Delivery states are simulated (fake data).",
                 style = MaterialTheme.typography.labelMedium,
