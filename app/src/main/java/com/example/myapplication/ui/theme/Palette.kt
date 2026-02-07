@@ -4,33 +4,42 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
-/**
- * Calm neutrals + single accent.
- * These are only used when dynamic color is unavailable/disabled.
- */
-private val Accent = Color(0xFF2AAFA4) // teal
+private val Accent = Color(0xFF2B6EF2)
+private val LightBackground = Color(0xFFF8FAFC)
+private val LightSurface = Color(0xFFFFFFFF)
+private val LightOnSurface = Color(0xFF111827)
+private val LightOnSurfaceVariant = Color(0xFF4B5563)
+private val DarkBackground = Color(0xFF0A0F1A)
+private val DarkSurface = Color(0xFF111827)
+private val DarkOnSurface = Color(0xFFE5E7EB)
+private val DarkOnSurfaceVariant = Color(0xFF9CA3AF)
 
 val LightAppColorScheme = lightColorScheme(
     primary = Accent,
     onPrimary = Color(0xFFFFFFFF),
-    primaryContainer = Color(0xFFB7EFE8),
-    onPrimaryContainer = Color(0xFF00201D),
+    primaryContainer = Color(0xFFDCE7FF),
+    onPrimaryContainer = Color(0xFF001848),
 
-    secondary = Color(0xFF4B635F),
+    secondary = Color(0xFF3F4C67),
     onSecondary = Color(0xFFFFFFFF),
-    secondaryContainer = Color(0xFFCDE8E3),
-    onSecondaryContainer = Color(0xFF06201D),
+    secondaryContainer = Color(0xFFDCE2F2),
+    onSecondaryContainer = Color(0xFF0F1B32),
 
-    background = Color(0xFFFBFCFC),
-    onBackground = Color(0xFF0F1414),
+    tertiary = Accent,
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFDCE7FF),
+    onTertiaryContainer = Color(0xFF001848),
 
-    surface = Color(0xFFFBFCFC),
-    onSurface = Color(0xFF0F1414),
-    surfaceVariant = Color(0xFFE7ECEB),
-    onSurfaceVariant = Color(0xFF3F4947),
+    background = LightBackground,
+    onBackground = LightOnSurface,
 
-    outline = Color(0xFF6F7977),
-    outlineVariant = Color(0xFFC3C8C6),
+    surface = LightSurface,
+    onSurface = LightOnSurface,
+    surfaceVariant = Color(0xFFE5E7EB),
+    onSurfaceVariant = LightOnSurfaceVariant,
+
+    outline = Color(0xFF94A3B8),
+    outlineVariant = Color(0xFFCBD5E1),
 
     error = Color(0xFFBA1A1A),
     onError = Color(0xFFFFFFFF),
@@ -39,26 +48,31 @@ val LightAppColorScheme = lightColorScheme(
 )
 
 val DarkAppColorScheme = darkColorScheme(
-    primary = Color(0xFF7BD8CD),
-    onPrimary = Color(0xFF003732),
-    primaryContainer = Color(0xFF005049),
-    onPrimaryContainer = Color(0xFF9BF4E8),
+    primary = Color(0xFFB3CAFF),
+    onPrimary = Color(0xFF022A78),
+    primaryContainer = Color(0xFF1F4FB7),
+    onPrimaryContainer = Color(0xFFDCE7FF),
 
-    secondary = Color(0xFFB2CCC7),
-    onSecondary = Color(0xFF1D3531),
-    secondaryContainer = Color(0xFF334B47),
-    onSecondaryContainer = Color(0xFFCDE8E3),
+    secondary = Color(0xFFBEC7DC),
+    onSecondary = Color(0xFF283247),
+    secondaryContainer = Color(0xFF3A455A),
+    onSecondaryContainer = Color(0xFFDAE2F6),
 
-    background = Color(0xFF0B1111),
-    onBackground = Color(0xFFEAF1EF),
+    tertiary = Color(0xFFB3CAFF),
+    onTertiary = Color(0xFF022A78),
+    tertiaryContainer = Color(0xFF1F4FB7),
+    onTertiaryContainer = Color(0xFFDCE7FF),
 
-    surface = Color(0xFF0B1111),
-    onSurface = Color(0xFFEAF1EF),
-    surfaceVariant = Color(0xFF3F4947),
-    onSurfaceVariant = Color(0xFFC3C8C6),
+    background = DarkBackground,
+    onBackground = DarkOnSurface,
 
-    outline = Color(0xFF8D9593),
-    outlineVariant = Color(0xFF3F4947),
+    surface = DarkSurface,
+    onSurface = DarkOnSurface,
+    surfaceVariant = Color(0xFF283146),
+    onSurfaceVariant = DarkOnSurfaceVariant,
+
+    outline = Color(0xFF64748B),
+    outlineVariant = Color(0xFF334155),
 
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),

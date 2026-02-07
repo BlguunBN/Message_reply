@@ -4,15 +4,9 @@ package com.example.myapplication.ui.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -24,64 +18,66 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.example.myapplication.AppConfig
+import com.example.myapplication.ui.components.AppCard
+import com.example.myapplication.ui.components.PrimaryButton
+import com.example.myapplication.ui.theme.UiDimens
 
 @Composable
 fun OnboardingScreen(
     modifier: Modifier = Modifier,
     onContinue: () -> Unit,
 ) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var serverUrl by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        serverUrl = AppConfig.getServerBaseUrl(ctx)
+        serverUrl = AppConfig.getServerBaseUrl(context)
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Welcome") }) }) { inner ->
+    Scaffold(topBar = { TopAppBar(title = { Text(text = "Welcome") }) }) { innerPadding ->
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .padding(inner)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(innerPadding)
+                .padding(UiDimens.screenPadding),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.sectionSpacing),
         ) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Message Reply", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        "Relay SMS to your server and keep replying with your real number—reliably.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            AppCard {
+                Text(text = "Message Reply", style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+                Text(
+                    text = "Relay SMS to your server and keep replying with your real number.",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
-            OutlinedTextField(
-                value = serverUrl,
-                onValueChange = { serverUrl = it },
-                label = { Text("Server base URL") },
-                placeholder = { Text("http://10.0.2.2:3000") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+            AppCard {
+                OutlinedTextField(
+                    value = serverUrl,
+                    onValueChange = { serverUrl = it },
+                    label = { Text(text = "Server base URL") },
+                    placeholder = { Text(text = "http://10.0.2.2:3000") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            Button(
-                onClick = {
-                    AppConfig.setServerBaseUrl(ctx, serverUrl)
-                    onContinue()
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = serverUrl.isNotBlank(),
-            ) { Text("Continue") }
+                PrimaryButton(
+                    text = "Continue",
+                    onClick = {
+                        AppConfig.setServerBaseUrl(context, serverUrl)
+                        onContinue()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = serverUrl.isNotBlank(),
+                )
 
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Tip: on a real phone, use your PC's LAN IP (e.g., http://192.168.1.50:3000).",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = "Tip: on a real phone, use your PC LAN IP. Example: http://192.168.1.50:3000",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

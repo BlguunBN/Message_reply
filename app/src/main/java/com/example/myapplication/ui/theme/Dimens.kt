@@ -2,29 +2,21 @@ package com.example.myapplication.ui.theme
 
 import androidx.compose.ui.unit.dp
 
-/**
- * Single source of truth for spacing.
- * Keep values on a 4dp grid for consistent rhythm.
- */
-object Dimens {
-    val xs = 4.dp
-    val sm = 8.dp
-    val md = 12.dp
-    val lg = 16.dp
-    val xl = 24.dp
-    val xxl = 32.dp
+object UiDimens {
+    val d4 = 4.dp
+    val d8 = 8.dp
+    val d12 = 12.dp
+    val d16 = 16.dp
+    val d24 = 24.dp
+    val d32 = 32.dp
 
-    // Common layout
-    val screenPadding = lg
-    val sectionSpacing = lg
-    val listItemSpacing = md
-
-    // Components
-    val cardPadding = lg
+    val screenPadding = d24
+    val sectionSpacing = d24
+    val listItemSpacing = d12
+    val cardPadding = d16
+    val inlineGap = d12
+    val chipHorizontal = d12
+    val chipVertical = d8
     val avatarSize = 40.dp
-    val chipHPadding = 10.dp
-    val chipVPadding = 6.dp
-    val inlineGap = md
-    val textTightGap = xs
-    val textNormalGap = sm
+    val minTouch = 48.dp
 }

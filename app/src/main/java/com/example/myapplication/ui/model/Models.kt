@@ -49,4 +49,5 @@ data class ApiTokenItem(
     val status: TokenStatus,
     val createdAt: String,
     val lastUsedAt: String?,
+    val expiresAt: String?,
 )

@@ -24,7 +24,7 @@ object FakeData {
         Conversation(
             id = "c3",
             title = "Bank",
-            lastMessage = "We couldn't process your request.",
+            lastMessage = "We could not process your request.",
             timestamp = Instant.now().minus(6, ChronoUnit.HOURS),
             unread = false,
             state = DeliveryState.FAILED,
@@ -38,7 +38,7 @@ object FakeData {
             incoming = true,
             body = "Hello! This is a test message.",
             timestamp = Instant.now().minus(2, ChronoUnit.HOURS),
-            state = DeliveryState.DELIVERED
+            state = DeliveryState.DELIVERED,
         ),
         ChatMessage(
             id = "m2",
@@ -46,7 +46,7 @@ object FakeData {
             incoming = false,
             body = "Replying from Message Reply.",
             timestamp = Instant.now().minus(110, ChronoUnit.MINUTES),
-            state = DeliveryState.DELIVERED
+            state = DeliveryState.DELIVERED,
         ),
         ChatMessage(
             id = "m3",
@@ -56,12 +56,12 @@ object FakeData {
             timestamp = Instant.now().minus(15, ChronoUnit.MINUTES),
             state = DeliveryState.FAILED,
             requestId = "req_9f21c1c5",
-            error = "HTTP 502: Telegram error"
-        )
+            error = "HTTP 502: Telegram error",
+        ),
     )
 
     val numbers: List<ConnectedNumber> = listOf(
-        ConnectedNumber("n1", "+1 (415) 555‑0198", NumberStatus.ACTIVE, "Last check: just now"),
+        ConnectedNumber("n1", "+1 (415) 555-0198", NumberStatus.ACTIVE, "Last check: just now"),
         ConnectedNumber("n2", "+86 138 0013 8000", NumberStatus.NEEDS_VERIFICATION, "Verify to start relaying"),
         ConnectedNumber("n3", "+44 20 7946 0958", NumberStatus.ERROR, "Server cannot reach device"),
     )
@@ -72,7 +72,7 @@ object FakeData {
     )
 
     val tokens: List<ApiTokenItem> = listOf(
-        ApiTokenItem("t1", "This device", TokenStatus.ACTIVE, "2026‑02‑06", "just now"),
-        ApiTokenItem("t2", "Old laptop", TokenStatus.REVOKED, "2026‑01‑20", null),
+        ApiTokenItem("t1", "This device", TokenStatus.ACTIVE, "2026-02-06", "just now", "2026-08-06"),
+        ApiTokenItem("t2", "Old laptop", TokenStatus.REVOKED, "2026-01-20", null, null),
     )
 }

@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material.icons.filled.Tune
@@ -16,14 +16,11 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -42,7 +39,7 @@ sealed class AppRoute(val route: String, val label: String) {
     data object Automations : AppRoute("automations", "Automations")
     data object Settings : AppRoute("settings", "Settings")
 
-    data object Tokens : AppRoute("settings/tokens", "Tokens")
+    data object Tokens : AppRoute("settings/tokens", "API Tokens")
     data object Thread : AppRoute("thread/{id}", "Thread") {
         fun create(id: String) = "thread/$id"
     }
@@ -54,21 +51,31 @@ fun AppScaffold(
     modifier: Modifier = Modifier,
     isWide: Boolean,
 ) {
-    val nav = rememberNavController()
+    val navController = rememberNavController()
     val tabs = listOf(AppRoute.Inbox, AppRoute.Numbers, AppRoute.Automations, AppRoute.Settings)
+    val currentBackStack by navController.currentBackStackEntryAsState()
+    val currentDestination = currentBackStack?.destination
+    val showTabs = tabs.any { tab -> currentDestination.isTabRoute(tab.route) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         bottomBar = {
-            if (!isWide) BottomNavBar(nav, tabs)
-        },
-    ) { inner ->
-        Row(Modifier.padding(inner).fillMaxSize()) {
-            if (isWide) {
-                AppRail(nav, tabs)
+            if (!isWide && showTabs) {
+                BottomNavBar(nav = navController, tabs = tabs)
             }
-            Box(Modifier.fillMaxSize()) {
-                AppNavHost(nav = nav, onLogout = onLogout)
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) { innerPadding ->
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            if (isWide && showTabs) {
+                AppRail(nav = navController, tabs = tabs)
+            }
+            Box(modifier = Modifier.fillMaxSize()) {
+                AppNavHost(nav = navController, onLogout = onLogout)
             }
         }
     }
@@ -76,32 +83,27 @@ fun AppScaffold(
 
 @Composable
 private fun BottomNavBar(nav: NavHostController, tabs: List<AppRoute>) {
-    val current by nav.currentBackStackEntryAsState()
-    val route = current?.destination?.route
+    val currentBackStack by nav.currentBackStackEntryAsState()
+    val currentDestination = currentBackStack?.destination
 
-    NavigationBar {
-        tabs.forEach { t ->
+    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+        tabs.forEach { tab ->
             NavigationBarItem(
-                selected = route == t.route,
+                selected = currentDestination.isTabRoute(tab.route),
                 onClick = {
-                    nav.navigate(t.route) {
+                    nav.navigate(tab.route) {
+                        popUpTo(nav.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
-                        popUpTo(AppRoute.Inbox.route) { saveState = true }
                         restoreState = true
                     }
                 },
                 icon = {
                     Icon(
-                        imageVector = when (t) {
-                            AppRoute.Inbox -> Icons.Default.Chat
-                            AppRoute.Numbers -> Icons.Default.SimCard
-                            AppRoute.Automations -> Icons.Default.Tune
-                            else -> Icons.Default.Settings
-                        },
-                        contentDescription = t.label
+                        imageVector = tab.icon(),
+                        contentDescription = tab.label,
                     )
                 },
-                label = { Text(t.label) }
+                label = { androidx.compose.material3.Text(text = tab.label) },
             )
         }
     }
@@ -109,32 +111,27 @@ private fun BottomNavBar(nav: NavHostController, tabs: List<AppRoute>) {
 
 @Composable
 private fun AppRail(nav: NavHostController, tabs: List<AppRoute>) {
-    val current by nav.currentBackStackEntryAsState()
-    val route = current?.destination?.route
+    val currentBackStack by nav.currentBackStackEntryAsState()
+    val currentDestination = currentBackStack?.destination
 
     NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-        tabs.forEach { t ->
+        tabs.forEach { tab ->
             NavigationRailItem(
-                selected = route == t.route,
+                selected = currentDestination.isTabRoute(tab.route),
                 onClick = {
-                    nav.navigate(t.route) {
+                    nav.navigate(tab.route) {
+                        popUpTo(nav.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
-                        popUpTo(AppRoute.Inbox.route) { saveState = true }
                         restoreState = true
                     }
                 },
                 icon = {
                     Icon(
-                        imageVector = when (t) {
-                            AppRoute.Inbox -> Icons.Default.Chat
-                            AppRoute.Numbers -> Icons.Default.SimCard
-                            AppRoute.Automations -> Icons.Default.Tune
-                            else -> Icons.Default.Settings
-                        },
-                        contentDescription = t.label
+                        imageVector = tab.icon(),
+                        contentDescription = tab.label,
                     )
                 },
-                label = { Text(t.label) }
+                label = { androidx.compose.material3.Text(text = tab.label) },
             )
         }
     }
@@ -154,10 +151,23 @@ private fun AppNavHost(nav: NavHostController, onLogout: () -> Unit) {
                 onLogout = onLogout,
             )
         }
-        composable(AppRoute.Tokens.route) { TokensScreen() }
-        composable(AppRoute.Thread.route) { backStack ->
-            val id = backStack.arguments?.getString("id") ?: ""
+        composable(AppRoute.Tokens.route) { TokensScreen(onBack = { nav.popBackStack() }) }
+        composable(AppRoute.Thread.route) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("id").orEmpty()
             ThreadScreen(conversationId = id, onBack = { nav.popBackStack() })
         }
     }
+}
+
+private fun AppRoute.icon() = when (this) {
+    AppRoute.Inbox -> Icons.AutoMirrored.Filled.Chat
+    AppRoute.Numbers -> Icons.Default.SimCard
+    AppRoute.Automations -> Icons.Default.Tune
+    AppRoute.Settings -> Icons.Default.Settings
+    else -> Icons.Default.Settings
+}
+
+private fun NavDestination?.isTabRoute(route: String): Boolean {
+    if (this == null) return false
+    return hierarchy.any { destination -> destination.route == route }
 }

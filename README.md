@@ -13,6 +13,13 @@
 
 ## Folder layout
 - `server/` — Python FastAPI webhook server
+- `app/` — Android app (Jetpack Compose)
+
+## UI source of truth
+- Active UI entry: `app/src/main/java/com/example/myapplication/MainActivity.kt`
+- Active navigation: `app/src/main/java/com/example/myapplication/ui/app/AppNav.kt`
+- Active screens: `app/src/main/java/com/example/myapplication/ui/screens/`
+- If you change UI, edit files in `ui/screens` (not old files under `ui/`).
 
 ---
 
