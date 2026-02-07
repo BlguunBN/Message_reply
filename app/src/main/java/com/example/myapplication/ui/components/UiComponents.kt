@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ui.model.ChatMessage
+import com.example.myapplication.ui.theme.Dimens
 import com.example.myapplication.ui.model.Conversation
 import com.example.myapplication.ui.model.DeliveryState
 
@@ -49,13 +50,22 @@ fun StatusChip(state: DeliveryState, modifier: Modifier = Modifier) {
         DeliveryState.FAILED -> "Failed" to MaterialTheme.colorScheme.errorContainer
     }
 
+    Pill(text = label, containerColor = bg, modifier = modifier)
+}
+
+@Composable
+fun Pill(
+    text: String,
+    containerColor: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.small)
-            .background(bg)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .background(containerColor)
+            .padding(horizontal = Dimens.chipHPadding, vertical = Dimens.chipVPadding)
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium)
+        Text(text, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -72,17 +82,23 @@ fun ConversationRow(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Dimens.cardPadding),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AvatarInitials(text = convo.title)
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(Dimens.inlineGap))
             Column(Modifier.weight(1f)) {
                 Text(convo.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(4.dp))
-                Text(convo.lastMessage, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(Dimens.textTightGap))
+                Text(
+                    convo.lastMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(Dimens.inlineGap))
             Column(horizontalAlignment = Alignment.End) {
                 StatusChip(convo.state)
                 AnimatedVisibility(visible = convo.unread) {
@@ -201,7 +217,7 @@ fun LoadingSkeletonRow(modifier: Modifier = Modifier) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
-                    .size(40.dp)
+                    .size(Dimens.avatarSize)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             )
@@ -243,7 +259,7 @@ private fun AvatarInitials(text: String, modifier: Modifier = Modifier) {
     val initials = text.trim().take(2).uppercase()
     Box(
         modifier = modifier
-            .size(40.dp)
+            .size(Dimens.avatarSize)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,

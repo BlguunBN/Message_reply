@@ -16,8 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import com.example.myapplication.ui.components.Pill
 import com.example.myapplication.ui.model.FakeData
+import com.example.myapplication.ui.theme.Dimens
 import com.example.myapplication.ui.model.NumberStatus
 
 @Composable
@@ -27,8 +28,8 @@ fun NumbersScreen(modifier: Modifier = Modifier) {
             modifier = modifier
                 .fillMaxSize()
                 .padding(inner)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(Dimens.screenPadding),
+            verticalArrangement = Arrangement.spacedBy(Dimens.listItemSpacing)
         ) {
             items(FakeData.numbers) { n ->
                 val chipText = when (n.status) {
@@ -43,16 +44,13 @@ fun NumbersScreen(modifier: Modifier = Modifier) {
                 }
 
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        Modifier.padding(Dimens.cardPadding),
+                        verticalArrangement = Arrangement.spacedBy(Dimens.textNormalGap)
+                    ) {
                         Text(n.number, style = MaterialTheme.typography.titleMedium)
                         Text(n.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            chipText,
-                            modifier = Modifier
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Pill(text = chipText, containerColor = color)
                     }
                 }
             }

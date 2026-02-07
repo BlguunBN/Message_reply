@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ui.components.ConversationRow
+import com.example.myapplication.ui.theme.Dimens
 import com.example.myapplication.ui.components.EmptyState
 import com.example.myapplication.ui.components.FilterChipRow
 import com.example.myapplication.ui.components.LoadingSkeletonRow
@@ -68,8 +69,8 @@ fun InboxScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(inner)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(Dimens.screenPadding),
+            verticalArrangement = Arrangement.spacedBy(Dimens.md)
         ) {
             TopSearchBar(query = query, onQueryChange = { query = it }, placeholder = "Search")
 
@@ -81,7 +82,7 @@ fun InboxScreen(
             )
 
             AnimatedVisibility(visible = loading) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Dimens.sm)) {
                     repeat(6) { LoadingSkeletonRow() }
                 }
             }
@@ -96,7 +97,7 @@ fun InboxScreen(
             } else if (!loading) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(Dimens.listItemSpacing)
                 ) {
                     items(conversations) { convo ->
                         ConversationRow(convo = convo, onClick = { onOpenThread(convo.id) })
