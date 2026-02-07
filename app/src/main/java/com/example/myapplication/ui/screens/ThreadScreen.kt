@@ -54,15 +54,23 @@ fun ThreadScreen(
     val messages = remember(conversationId) { mutableStateListOf<ChatMessage>().apply { addAll(FakeData.thread(conversationId)) } }
     var composer by remember { mutableStateOf("") }
 
+    // Chat UX: keep newest messages visually near the bottom.
+    val isNearBottom: () -> Boolean = {
+        // When reverseLayout=true, bottom == index 0.
+        listState.firstVisibleItemIndex <= 1
+    }
+
     LaunchedEffect(conversationId) {
         if (messages.isNotEmpty()) {
-            listState.scrollToItem(messages.lastIndex)
+            // Jump to the bottom (newest) when opening.
+            listState.scrollToItem(0)
         }
     }
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
+        if (messages.isNotEmpty() && isNearBottom()) {
+            // Auto-scroll only if user is already near the bottom.
+            listState.animateScrollToItem(0)
         }
     }
 
@@ -93,16 +101,17 @@ fun ThreadScreen(
                     .weight(1f)
                     .fillMaxWidth(),
                 state = listState,
+                reverseLayout = true,
                 contentPadding = PaddingValues(
                     start = Dimens.screenPadding,
                     end = Dimens.screenPadding,
                     top = Dimens.screenPadding,
-                    // Extra bottom padding so the last bubble doesn't sit under the composer surface.
+                    // When reverseLayout=true, this padding appears at the visual bottom.
                     bottom = Dimens.screenPadding + 72.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(Dimens.listItemSpacing)
             ) {
-                items(messages, key = { it.id }) { msg ->
+                items(messages.asReversed(), key = { it.id }) { msg ->
                     MessageBubble(
                         msg = msg,
                         onRetry = { /* TODO */ },
