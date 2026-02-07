@@ -202,7 +202,7 @@ fun ThreadScreen(
                     ) {
                         items(messages, key = { it.id }) { message ->
                             MessageBubble(
-                                message = message,
+                                msg = message,
                                 onRetry = {
                                     val index = messages.indexOfFirst { it.id == message.id }
                                     if (index != -1) {
